@@ -22,8 +22,8 @@ public class SecurityConfiguration {
     @SuppressWarnings("Convert2MethodRef")
     public SecurityFilterChain filterChain(HttpSecurity http) {
         return http.authorizeHttpRequests(a ->
-//                        a.requestMatchers("/auth/**").authenticated()
-                                a.anyRequest().anonymous())
+                        a.requestMatchers("/auth/**").authenticated()
+                                .anyRequest().anonymous())
                 .oauth2ResourceServer(o ->
                         o.jwt(Customizer.withDefaults()))
                 .csrf(c -> c.disable())
