@@ -9,7 +9,9 @@ import {
   signInWithEmailAndPassword,
   signOut,
   type User,
+  type UserCredential,
 } from 'firebase/auth'
+import { signIn as signInToBackend } from '@/backend'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyC5Mk0SoEZf2XHgXt_yJvKS-Rp4YYvW6zA',
@@ -98,14 +100,31 @@ export function subscribeToAuthState(listener: (snapshot: AuthSnapshot) => void)
   })
 }
 
+async function syncAuthenticatedUserWithBackend(userCredential: UserCredential) {
+  const idToken = await userCredential.user.getIdToken()
+
+  try {
+    await signInToBackend(idToken)
+  } catch (error) {
+    await signOut(auth).catch(() => undefined)
+    throw error
+  }
+}
+
 export async function signInWithEmail(email: string, password: string) {
   await persistenceReady
-  return signInWithEmailAndPassword(auth, email, password)
+  const userCredential = await signInWithEmailAndPassword(auth, email, password)
+  await syncAuthenticatedUserWithBackend(userCredential)
+
+  return userCredential
 }
 
 export async function signUpWithEmail(email: string, password: string) {
   await persistenceReady
-  return createUserWithEmailAndPassword(auth, email, password)
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+  await syncAuthenticatedUserWithBackend(userCredential)
+
+  return userCredential
 }
 
 export async function signOutUser() {
