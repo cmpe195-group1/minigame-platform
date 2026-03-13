@@ -10,13 +10,15 @@ import GamePage from '@/pages/GamePage'
 import Search from '@/pages/Search'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
+import PhaserTest from "./components/PhaserTest"
+import ChessGameWrapper from "./games/chess/ChessGameWrapper"
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
         <div className="bg-blue-900 text-white min-h-screen">
             <Header />
-            <NavBar />
+            {/* <NavBar /> */}
             <main className="px-6 py-6 max-w-7xl mx-auto">
                 <Routes>
                     <Route path="/" element={<Home />} />
@@ -25,6 +27,8 @@ createRoot(document.getElementById('root')!).render(
                     <Route path="/games/:game" element={<GamePage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/chess" element={<ChessGameWrapper />} />
+                    <Route path="*" element={<h1>404 Not Found</h1>} />
                 </Routes>
             </main>
         </div>
