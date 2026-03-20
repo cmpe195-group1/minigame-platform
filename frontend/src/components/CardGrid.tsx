@@ -77,7 +77,6 @@ export default function CardGrid() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Game Library</h1>
       <h1 className="text-3xl font-bold mb-6">
         {searchQuery || selectedCategory
           ? `Filtered Games${searchQuery ? ` for "${searchQuery}"` : ""}${selectedCategory ? ` in ${selectedCategory}` : ""}`
