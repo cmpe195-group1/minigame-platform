@@ -12,12 +12,17 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
+    "express": "^5.2.1",
+    "framer-motion": "^12.36.0",
     "lucide-react": "^0.563.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
+    "phaser": "^3.90.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "react-router": "^7.13.0",
+    "socket.io-client": "^4.8.3",
     "styled-components": "^6.3.8",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

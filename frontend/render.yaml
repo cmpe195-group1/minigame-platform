@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: archery-multiplayer
+    env: node
+    region: singapore
+    buildCommand: npm install && npm run build && npm run build:server
+    startCommand: node server/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is injected automatically by Render for web services — do not set it here
