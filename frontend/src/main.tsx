@@ -16,8 +16,7 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
         <div className="bg-blue-900 text-white min-h-screen">
             <Header />
-            <NavBar />
-            <main className="px-6 py-6 max-w-7xl mx-auto">
+            <main className="px-6 py-6 mt-20 max-w-7xl mx-auto">
                 <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/games" element={<Games />} />

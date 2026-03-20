@@ -1,4 +1,5 @@
 import styled from "styled-components"
+import { useSearchParams } from "react-router"
 
 const LeftNavbarContainer = styled.nav`
   position: fixed;
@@ -50,13 +51,53 @@ const Button = styled.button`
   }
 `;
 
-const Navbar = () => {
+interface NavBarProps {
+  onClose?: () => void;
+}
+
+const Navbar = ({ onClose }: NavBarProps) => {
   const menuItems = ["HOME", "ALL GAMES", "PUZZLE", "CHESS", "SPORT"];
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const handleCategoryClick = (item: string) => {
+    let category = null;
+
+    switch (item.toLowerCase()) {
+      case "puzzle":
+        category = "puzzle";
+        break;
+      case "chess":
+        category = "chess";
+        break;
+      case "sport":
+        category = "sport";
+        break;
+      case "all games":
+      case "home":
+        category = null; // reset
+        break;
+      default:
+        category = null;
+    }
+
+    if (category === null) {
+      // Remove category param
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("category");
+      setSearchParams(newParams);
+    } else {
+      setSearchParams({ ...Object.fromEntries(searchParams), category });
+    }
+
+    // Close sidebar after selection
+    onClose?.();
+  };
+
   return (
     <LeftNavbarContainer>
       <Nav>
         {menuItems.map((item) => (
-          <Button key={item}>
+          <Button key={item} onClick={() => handleCategoryClick(item)}>
             <span>{item}</span>
           </Button>
         ))}
