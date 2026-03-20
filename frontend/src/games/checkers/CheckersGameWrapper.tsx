@@ -3,21 +3,32 @@ import Phaser from "phaser";
 import { CheckersScene } from "./checkersScene";
 
 export default function CheckersGameWrapper() {
-  const ref = useRef<HTMLDivElement | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!ref.current) return;
-
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       width: 512,
       height: 512,
-      parent: ref.current,
+      parent: ref.current!,
       scene: CheckersScene,
+      backgroundColor: "#000",
     });
 
     return () => game.destroy(true);
   }, []);
 
-  return <div ref={ref} />;
+  return (
+    <div
+      style={{
+        marginTop: "100px",          // pushes below header
+        marginLeft: "128px",         // pushes right of sidebar
+        width: "calc(100% - 256px)",// remaining width after sidebar
+        display: "flex",
+        justifyContent: "center",
+      }}
+    >
+      <div ref={ref} />
+    </div>
+  );
 }
