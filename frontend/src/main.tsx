@@ -13,6 +13,7 @@ import RegisterPage from '@/pages/RegisterPage'
 import PhaserTest from "./components/PhaserTest"
 import ChessGameWrapper from "./games/chess/ChessGameWrapper"
 import CheckersGameWrapper from "./games/checkers/CheckersGameWrapper"
+import AirHockeyGameWrapper from "./games/airhockey/AirHockeyGameWrapper"
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -30,6 +31,7 @@ createRoot(document.getElementById('root')!).render(
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/chess" element={<ChessGameWrapper />} />
                     <Route path="/checkers" element={<CheckersGameWrapper />} />
+                    <Route path="/airhockey" element={<AirHockeyGameWrapper />} />
                     <Route path="*" element={<h1>404 Not Found</h1>} />
                 </Routes>
             </main>

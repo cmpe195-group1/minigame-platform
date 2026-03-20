@@ -23,7 +23,7 @@ export default function ChessGameWrapper() {
         style={{
           marginTop: "100px",          // pushes below header
           marginLeft: "128px",         // pushes right of sidebar
-          width: "calc(100% - 256px)",// remaining width after sidebar
+          width: "calc(100% - 128px)",// remaining width after sidebar
           display: "flex",
           justifyContent: "center",
         }}

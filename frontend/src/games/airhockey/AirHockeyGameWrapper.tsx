@@ -1,17 +1,23 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
-import { CheckersScene } from "./checkersScene";
+import { AirHockeyScene } from "./AirHockeyScene";
 
-export default function CheckersGameWrapper() {
+export default function AirHockeyGameWrapper() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const game = new Phaser.Game({
       type: Phaser.AUTO,
-      width: 512,
-      height: 512,
+      width: 600,
+      height: 400,
       parent: ref.current!,
-      scene: CheckersScene,
+      physics: {
+        default: "arcade",
+        arcade: {
+          debug: false,
+        },
+      },
+      scene: AirHockeyScene,
       backgroundColor: "#000",
     });
 
@@ -21,9 +27,9 @@ export default function CheckersGameWrapper() {
   return (
     <div
       style={{
-        marginTop: "100px",          // pushes below header
-        marginLeft: "128px",         // pushes right of sidebar
-        width: "calc(100% - 128px)",// remaining width after sidebar
+        marginTop: "100px",           // below header
+        marginLeft: "128px",          // right of sidebar
+        width: "calc(100% - 128px)",  // remaining space
         display: "flex",
         justifyContent: "center",
       }}
