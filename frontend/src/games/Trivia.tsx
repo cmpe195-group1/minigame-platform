@@ -1,6 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 
 type Phase = "setup" | "loading" | "question" | "reveal" | "results"
+type SetupMode = "local" | "host" | "join"
+type PlayMode = "local" | "host" | "guest"
+
+type NetworkMessage =
+  | {
+      type: "join-request"
+      playerName: string
+    }
+  | {
+      type: "submit-answer"
+      answer: string | null
+      timedOut: boolean
+    }
+  | {
+      type: "lobby-sync"
+      players: LobbyPlayer[]
+      settings: GameSettings
+      yourPlayerId: string
+      hostName: string
+    }
+  | {
+      type: "state-sync"
+      state: BroadcastGameState
+      yourPlayerId: string
+    }
+  | {
+      type: "system"
+      message: string
+    }
 
 interface TriviaCategory {
   id: number
@@ -16,10 +45,15 @@ interface GameSettings {
 }
 
 interface PlayerRecord {
-  id: number
+  id: string
   name: string
   score: number
   answered: number
+}
+
+interface LobbyPlayer {
+  id: string
+  name: string
 }
 
 interface ActiveQuestion {
@@ -35,6 +69,18 @@ interface RevealState {
   selectedAnswer: string | null
   correct: boolean
   timedOut: boolean
+}
+
+interface BroadcastGameState {
+  phase: Phase
+  players: PlayerRecord[]
+  currentTurn: number
+  activeQuestion: ActiveQuestion | null
+  revealState: RevealState | null
+  secondsLeft: number
+  settings: GameSettings
+  gameError: string
+  autoContinueRemainingMs: number
 }
 
 interface OpenTdbQuestion {
@@ -55,11 +101,30 @@ interface OpenTdbCategoryResponse {
   trivia_categories: TriviaCategory[]
 }
 
+interface HostConnectionRecord {
+  playerId: string
+  playerName: string
+  peer: RTCPeerConnection
+  channel: RTCDataChannel
+}
+
+interface PendingInvite {
+  playerId: string
+  peer: RTCPeerConnection
+  channel: RTCDataChannel
+}
+
+interface GuestConnectionRecord {
+  peer: RTCPeerConnection
+  channel: RTCDataChannel | null
+}
+
 const TURN_SECONDS = 30
 const API_COOLDOWN_MS = 5000
 const REVEAL_AUTO_CONTINUE_MS = 10000
 const MIN_PLAYERS = 2
 const MAX_PLAYERS = 6
+const HOST_PLAYER_ID = "host-player"
 const DEFAULT_SETTINGS: GameSettings = {
   category: "",
   difficulty: "",
@@ -118,9 +183,66 @@ function getPlacementLabel(position: number) {
   return `${position}th`
 }
 
+function createPeerId(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function encodeSignalPayload(description: RTCSessionDescriptionInit) {
+  return btoa(JSON.stringify(description))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "")
+}
+
+function decodeSignalPayload(payload: string) {
+  const normalized = payload.trim().replace(/-/g, "+").replace(/_/g, "/")
+  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4))
+  return JSON.parse(atob(`${normalized}${padding}`)) as RTCSessionDescriptionInit
+}
+
+function waitForIceGatheringComplete(peer: RTCPeerConnection) {
+  if (peer.iceGatheringState === "complete") {
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve) => {
+    const handleStateChange = () => {
+      if (peer.iceGatheringState === "complete") {
+        peer.removeEventListener("icegatheringstatechange", handleStateChange)
+        resolve()
+      }
+    }
+
+    peer.addEventListener("icegatheringstatechange", handleStateChange)
+  })
+}
+
+function sendChannelMessage(channel: RTCDataChannel, message: NetworkMessage) {
+  if (channel.readyState !== "open") {
+    return
+  }
+
+  channel.send(JSON.stringify(message))
+}
+
 export default function Trivia() {
+  const [setupMode, setSetupMode] = useState<SetupMode>("local")
+  const [playMode, setPlayMode] = useState<PlayMode>("local")
   const [phase, setPhase] = useState<Phase>("setup")
   const [playerNames, setPlayerNames] = useState<string[]>(["", ""])
+  const [hostName, setHostName] = useState("")
+  const [joinName, setJoinName] = useState("")
+  const [joinHostCode, setJoinHostCode] = useState("")
+  const [joinResponseCode, setJoinResponseCode] = useState("")
+  const [hostInviteCode, setHostInviteCode] = useState("")
+  const [hostAnswerCode, setHostAnswerCode] = useState("")
+  const [hostStatus, setHostStatus] = useState("")
+  const [joinStatus, setJoinStatus] = useState("")
+  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([])
   const [settings, setSettings] = useState<GameSettings>(DEFAULT_SETTINGS)
   const [categories, setCategories] = useState<TriviaCategory[]>([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
@@ -137,10 +259,24 @@ export default function Trivia() {
   const [cooldownRequestKind, setCooldownRequestKind] = useState<"categories" | "question" | null>(null)
   const [cooldownRemainingSeconds, setCooldownRemainingSeconds] = useState(0)
   const [autoContinueRemainingMs, setAutoContinueRemainingMs] = useState(0)
+  const [localPlayerId, setLocalPlayerId] = useState<string | null>(null)
 
   const requestIdRef = useRef(0)
   const lastApiCallAtRef = useRef(0)
   const cooldownWaitIdRef = useRef(0)
+  const pendingInviteRef = useRef<PendingInvite | null>(null)
+  const hostConnectionsRef = useRef<Map<string, HostConnectionRecord>>(new Map())
+  const guestConnectionRef = useRef<GuestConnectionRecord | null>(null)
+  const submitAnswerRef = useRef<(selectedAnswer: string | null, timedOut?: boolean) => void>(() => undefined)
+  const hostNameRef = useRef(hostName)
+  const joinNameRef = useRef(joinName)
+  const settingsRef = useRef(settings)
+  const phaseRef = useRef(phase)
+  const currentTurnRef = useRef(currentTurn)
+  const playersRef = useRef(players)
+  const playModeRef = useRef(playMode)
+  const answerLockedRef = useRef(answerLocked)
+  const localPlayerIdRef = useRef(localPlayerId)
 
   const totalTurns = players.length * settings.questionsPerPlayer
   const activePlayerIndex = players.length ? currentTurn % players.length : 0
@@ -172,6 +308,337 @@ export default function Trivia() {
     const topScore = leaderboard[0].score
     return leaderboard.filter((player) => player.score === topScore)
   }, [leaderboard])
+
+  useEffect(() => {
+    hostNameRef.current = hostName
+    joinNameRef.current = joinName
+    settingsRef.current = settings
+    phaseRef.current = phase
+    currentTurnRef.current = currentTurn
+    playersRef.current = players
+    playModeRef.current = playMode
+    answerLockedRef.current = answerLocked
+    localPlayerIdRef.current = localPlayerId
+  }, [hostName, joinName, settings, phase, currentTurn, players, playMode, answerLocked, localPlayerId])
+
+  const closePendingInvite = useCallback(() => {
+    const pendingInvite = pendingInviteRef.current
+
+    if (!pendingInvite) {
+      return
+    }
+
+    try {
+      pendingInvite.channel.close()
+    } catch {
+      // no-op
+    }
+
+    try {
+      pendingInvite.peer.close()
+    } catch {
+      // no-op
+    }
+
+    pendingInviteRef.current = null
+  }, [])
+
+  const closeAllConnections = useCallback(() => {
+    closePendingInvite()
+
+    hostConnectionsRef.current.forEach((connection) => {
+      try {
+        connection.channel.close()
+      } catch {
+        // no-op
+      }
+
+      try {
+        connection.peer.close()
+      } catch {
+        // no-op
+      }
+    })
+
+    hostConnectionsRef.current.clear()
+
+    if (guestConnectionRef.current) {
+      try {
+        guestConnectionRef.current.channel?.close()
+      } catch {
+        // no-op
+      }
+
+      try {
+        guestConnectionRef.current.peer.close()
+      } catch {
+        // no-op
+      }
+
+      guestConnectionRef.current = null
+    }
+  }, [closePendingInvite])
+
+  useEffect(() => {
+    return () => closeAllConnections()
+  }, [closeAllConnections])
+
+  const syncHostLobbyPlayers = useCallback(() => {
+    const hostPlayer: LobbyPlayer = {
+      id: HOST_PLAYER_ID,
+      name: hostNameRef.current.trim() || "Host",
+    }
+
+    const remotePlayers = [...hostConnectionsRef.current.values()]
+      .filter((connection) => connection.playerName.trim())
+      .map((connection) => ({
+        id: connection.playerId,
+        name: connection.playerName,
+      }))
+
+    const nextLobbyPlayers = [hostPlayer, ...remotePlayers]
+    setLobbyPlayers(nextLobbyPlayers)
+    return nextLobbyPlayers
+  }, [])
+
+  const broadcastLobbySync = useCallback(
+    (explicitPlayers?: LobbyPlayer[]) => {
+      const playersToShare = explicitPlayers ?? syncHostLobbyPlayers()
+
+      hostConnectionsRef.current.forEach((connection) => {
+        sendChannelMessage(connection.channel, {
+          type: "lobby-sync",
+          players: playersToShare,
+          settings: settingsRef.current,
+          yourPlayerId: connection.playerId,
+          hostName: hostNameRef.current.trim() || "Host",
+        })
+      })
+    },
+    [syncHostLobbyPlayers],
+  )
+
+  const removeHostConnection = useCallback(
+    (playerId: string, statusMessage?: string) => {
+      const existingConnection = hostConnectionsRef.current.get(playerId)
+
+      if (existingConnection) {
+        try {
+          existingConnection.channel.close()
+        } catch {
+          // no-op
+        }
+
+        try {
+          existingConnection.peer.close()
+        } catch {
+          // no-op
+        }
+
+        hostConnectionsRef.current.delete(playerId)
+      }
+
+      if (pendingInviteRef.current?.playerId === playerId) {
+        closePendingInvite()
+      }
+
+      const nextLobbyPlayers = syncHostLobbyPlayers()
+      broadcastLobbySync(nextLobbyPlayers)
+
+      if (statusMessage) {
+        setHostStatus(statusMessage)
+      }
+    },
+    [broadcastLobbySync, closePendingInvite, syncHostLobbyPlayers],
+  )
+
+  const submitAnswer = useCallback(
+    (selectedAnswer: string | null, timedOut = false) => {
+      if (phase !== "question" || !activeQuestion || !activePlayer || answerLocked) {
+        return
+      }
+
+      setAnswerLocked(true)
+
+      const correct = !timedOut && selectedAnswer === activeQuestion.correctAnswer
+
+      setPlayers((currentPlayers) =>
+        currentPlayers.map((player, index) =>
+          index === activePlayerIndex
+            ? {
+                ...player,
+                answered: player.answered + 1,
+                score: player.score + (correct ? 1 : 0),
+              }
+            : player,
+        ),
+      )
+
+      setRevealState({ selectedAnswer, correct, timedOut })
+      setPhase("reveal")
+    },
+    [phase, activeQuestion, activePlayer, answerLocked, activePlayerIndex],
+  )
+
+  useEffect(() => {
+    submitAnswerRef.current = submitAnswer
+  }, [submitAnswer])
+
+  const handleHostNetworkMessage = useCallback(
+    (playerId: string, rawMessage: string) => {
+      let message: NetworkMessage
+
+      try {
+        message = JSON.parse(rawMessage) as NetworkMessage
+      } catch {
+        return
+      }
+
+      if (message.type === "join-request") {
+        const existingConnection = hostConnectionsRef.current.get(playerId)
+
+        if (!existingConnection) {
+          return
+        }
+
+        existingConnection.playerName = message.playerName.trim() || "Guest"
+        const nextLobbyPlayers = syncHostLobbyPlayers()
+        broadcastLobbySync(nextLobbyPlayers)
+        setHostStatus(`${existingConnection.playerName} joined the lobby.`)
+        return
+      }
+
+      if (message.type === "submit-answer") {
+        const currentPlayers = playersRef.current
+        const activeIndex = currentPlayers.length ? currentTurnRef.current % currentPlayers.length : 0
+        const currentActivePlayer = currentPlayers[activeIndex] ?? null
+
+        if (
+          playModeRef.current !== "host" ||
+          phaseRef.current !== "question" ||
+          answerLockedRef.current ||
+          !currentActivePlayer ||
+          currentActivePlayer.id !== playerId
+        ) {
+          return
+        }
+
+        submitAnswerRef.current(message.answer, message.timedOut)
+      }
+    },
+    [broadcastLobbySync, syncHostLobbyPlayers],
+  )
+
+  const handleGuestNetworkMessage = useCallback((rawMessage: string) => {
+    let message: NetworkMessage
+
+    try {
+      message = JSON.parse(rawMessage) as NetworkMessage
+    } catch {
+      return
+    }
+
+    if (message.type === "lobby-sync") {
+      setSetupMode("join")
+      setPlayMode("guest")
+      setSettings(message.settings)
+      setLobbyPlayers(message.players)
+      setLocalPlayerId(message.yourPlayerId)
+      setJoinStatus(`Connected to ${message.hostName}'s lobby. Waiting for the host to start.`)
+      return
+    }
+
+    if (message.type === "state-sync") {
+      const nextState = message.state
+      const nextActivePlayer = nextState.players.length
+        ? nextState.players[nextState.currentTurn % nextState.players.length]
+        : null
+
+      setPlayMode("guest")
+      setLocalPlayerId(message.yourPlayerId)
+      setPlayers(nextState.players)
+      setLobbyPlayers(nextState.players.map((player) => ({ id: player.id, name: player.name })))
+      setPhase(nextState.phase)
+      setCurrentTurn(nextState.currentTurn)
+      setActiveQuestion(nextState.activeQuestion)
+      setRevealState(nextState.revealState)
+      setSecondsLeft(nextState.secondsLeft)
+      setSettings(nextState.settings)
+      setGameError(nextState.gameError)
+      setAutoContinueRemainingMs(nextState.autoContinueRemainingMs)
+
+      if (
+        nextState.phase !== "question" ||
+        nextActivePlayer?.id !== message.yourPlayerId ||
+        nextState.currentTurn !== currentTurnRef.current
+      ) {
+        setAnswerLocked(false)
+      }
+
+      if (nextState.phase === "results") {
+        setJoinStatus("Match complete.")
+      } else if (nextState.phase === "reveal") {
+        setJoinStatus("Answer revealed.")
+      } else if (nextState.phase === "question") {
+        setJoinStatus(
+          nextActivePlayer?.id === message.yourPlayerId
+            ? "It is your turn to answer."
+            : `Waiting for ${nextActivePlayer?.name ?? "the next player"}.`,
+        )
+      } else {
+        setJoinStatus("Connected to the live match.")
+      }
+      return
+    }
+
+    if (message.type === "system") {
+      setJoinStatus(message.message)
+    }
+  }, [])
+
+  const attachHostConnectionEvents = useCallback(
+    (playerId: string, peer: RTCPeerConnection, channel: RTCDataChannel) => {
+      channel.onopen = () => {
+        pendingInviteRef.current = null
+        hostConnectionsRef.current.set(playerId, {
+          playerId,
+          playerName: "",
+          peer,
+          channel,
+        })
+        setHostInviteCode("")
+        setHostAnswerCode("")
+        setHostStatus("A guest connected. Waiting for their player name...")
+      }
+
+      channel.onmessage = (event) => {
+        handleHostNetworkMessage(playerId, String(event.data))
+      }
+
+      channel.onclose = () => {
+        if (hostConnectionsRef.current.has(playerId)) {
+          removeHostConnection(playerId, "A guest disconnected from the lobby.")
+        }
+      }
+
+      peer.onconnectionstatechange = () => {
+        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
+          if (hostConnectionsRef.current.has(playerId)) {
+            removeHostConnection(playerId, "A guest disconnected from the lobby.")
+            return
+          }
+
+          if (pendingInviteRef.current?.playerId === playerId) {
+            closePendingInvite()
+            setHostInviteCode("")
+            setHostAnswerCode("")
+            setHostStatus("The pending invite disconnected before it completed.")
+          }
+        }
+      }
+    },
+    [closePendingInvite, handleHostNetworkMessage, removeHostConnection],
+  )
 
   const waitForApiCooldown = useCallback(
     async (kind: "categories" | "question", signal: AbortSignal) => {
@@ -231,54 +698,55 @@ export default function Trivia() {
     [],
   )
 
-  const loadCategories = useCallback(async (signal: AbortSignal) => {
-    setCategoriesLoading(true)
-    setCategoriesError("")
+  const loadCategories = useCallback(
+    async (signal: AbortSignal) => {
+      setCategoriesLoading(true)
+      setCategoriesError("")
 
-    try {
-      const canRequest = await waitForApiCooldown("categories", signal)
+      try {
+        const canRequest = await waitForApiCooldown("categories", signal)
 
-      if (!canRequest || signal.aborted) {
-        return
-      }
+        if (!canRequest || signal.aborted) {
+          return
+        }
 
-      lastApiCallAtRef.current = Date.now()
-      const response = await fetch("https://opentdb.com/api_category.php", {
-        signal,
-      })
+        lastApiCallAtRef.current = Date.now()
+        const response = await fetch("https://opentdb.com/api_category.php", {
+          signal,
+        })
 
-      if (!response.ok) {
+        if (!response.ok) {
+          setCategories([])
+          setCategoriesError(`Could not load categories (${response.status}). You can still play using Any Category.`)
+          return
+        }
+
+        const data = (await response.json()) as OpenTdbCategoryResponse
+        setCategories(data.trivia_categories ?? [])
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return
+        }
+
         setCategories([])
-        setCategoriesError(`Could not load categories (${response.status}). You can still play using Any Category.`)
-        return
+        setCategoriesError("Could not load categories. You can still play using Any Category.")
+      } finally {
+        if (!signal.aborted) {
+          setCategoriesLoading(false)
+        }
       }
-
-      const data = (await response.json()) as OpenTdbCategoryResponse
-      setCategories(data.trivia_categories ?? [])
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return
-      }
-
-      setCategories([])
-      setCategoriesError("Could not load categories. You can still play using Any Category.")
-    } finally {
-      if (!signal.aborted) {
-        setCategoriesLoading(false)
-      }
-    }
-  }, [waitForApiCooldown])
+    },
+    [waitForApiCooldown],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
-
     void loadCategories(controller.signal)
-
     return () => controller.abort()
   }, [loadCategories])
 
   useEffect(() => {
-    if (phase !== "loading" || players.length === 0 || currentTurn >= totalTurns) {
+    if (phase !== "loading" || players.length === 0 || currentTurn >= totalTurns || playMode === "guest") {
       return
     }
 
@@ -354,10 +822,27 @@ export default function Trivia() {
     void loadQuestion()
 
     return () => controller.abort()
-  }, [phase, currentTurn, totalTurns, players.length, settings, loadAttempt, waitForApiCooldown])
+  }, [phase, currentTurn, totalTurns, players.length, settings, loadAttempt, playMode, waitForApiCooldown])
+
+  const resetNetworkState = useCallback(
+    (nextMode?: SetupMode) => {
+      closeAllConnections()
+      setPlayMode(nextMode === "join" ? "guest" : "local")
+      setLocalPlayerId(null)
+      setLobbyPlayers([])
+      setHostInviteCode("")
+      setHostAnswerCode("")
+      setHostStatus("")
+      setJoinHostCode("")
+      setJoinResponseCode("")
+      setJoinStatus("")
+    },
+    [closeAllConnections],
+  )
 
   const resetMatch = useCallback(() => {
     requestIdRef.current += 1
+    resetNetworkState(setupMode)
     setPhase("setup")
     setPlayers([])
     setCurrentTurn(0)
@@ -369,9 +854,9 @@ export default function Trivia() {
     setAnswerLocked(false)
     setLoadAttempt(0)
     setAutoContinueRemainingMs(0)
-  }, [])
+  }, [resetNetworkState, setupMode])
 
-  const startMatch = () => {
+  const startLocalMatch = () => {
     const trimmedNames = playerNames.map((name) => name.trim())
 
     if (trimmedNames.some((name) => !name)) {
@@ -392,9 +877,11 @@ export default function Trivia() {
     }
 
     setSetupError("")
+    setPlayMode("local")
+    setLocalPlayerId(null)
     setPlayers(
       trimmedNames.map((name, index) => ({
-        id: index + 1,
+        id: `local-${index + 1}`,
         name,
         score: 0,
         answered: 0,
@@ -410,50 +897,39 @@ export default function Trivia() {
     setPhase("loading")
   }
 
-  const submitAnswer = useCallback(
-    (selectedAnswer: string | null, timedOut = false) => {
-      if (phase !== "question" || !activeQuestion || !activePlayer || answerLocked) {
-        return
-      }
+  const startHostedMatch = () => {
+    const trimmedHostName = hostName.trim()
 
-      setAnswerLocked(true)
-
-      const correct = !timedOut && selectedAnswer === activeQuestion.correctAnswer
-
-      setPlayers((currentPlayers) =>
-        currentPlayers.map((player, index) =>
-          index === activePlayerIndex
-            ? {
-                ...player,
-                answered: player.answered + 1,
-                score: player.score + (correct ? 1 : 0),
-              }
-            : player,
-        ),
-      )
-
-      setRevealState({ selectedAnswer, correct, timedOut })
-      setPhase("reveal")
-    },
-    [phase, activeQuestion, activePlayer, answerLocked, activePlayerIndex],
-  )
-
-  useEffect(() => {
-    if (phase !== "question" || answerLocked) {
+    if (!trimmedHostName) {
+      setSetupError("Enter your host player name before starting the hosted match.")
       return
     }
 
-    if (secondsLeft <= 0) {
-      submitAnswer(null, true)
+    if (lobbyPlayers.length < 2) {
+      setSetupError("At least one guest must join the lobby before the hosted match can start.")
       return
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setSecondsLeft((currentSeconds) => Math.max(currentSeconds - 1, 0))
-    }, 1000)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [phase, secondsLeft, answerLocked, submitAnswer])
+    setSetupError("")
+    setPlayMode("host")
+    setLocalPlayerId(HOST_PLAYER_ID)
+    const nextPlayers = lobbyPlayers.map((player) => ({
+      id: player.id,
+      name: player.name,
+      score: 0,
+      answered: 0,
+    }))
+    setPlayers(nextPlayers)
+    setCurrentTurn(0)
+    setActiveQuestion(null)
+    setRevealState(null)
+    setSecondsLeft(TURN_SECONDS)
+    setGameError("")
+    setAnswerLocked(false)
+    setLoadAttempt(0)
+    setPhase("loading")
+    setHostStatus("Hosted match started.")
+  }
 
   const continueAfterReveal = useCallback(() => {
     const nextTurn = currentTurn + 1
@@ -475,8 +951,27 @@ export default function Trivia() {
   }, [currentTurn, totalTurns])
 
   useEffect(() => {
-    if (phase !== "reveal" || !settings.autoContinueAfterReveal) {
-      setAutoContinueRemainingMs(0)
+    if (phase !== "question" || answerLocked || playMode === "guest") {
+      return
+    }
+
+    if (secondsLeft <= 0) {
+      submitAnswer(null, true)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSecondsLeft((currentSeconds) => Math.max(currentSeconds - 1, 0))
+    }, 1000)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [phase, secondsLeft, answerLocked, playMode, submitAnswer])
+
+  useEffect(() => {
+    if (phase !== "reveal" || !settings.autoContinueAfterReveal || playMode === "guest") {
+      if (playMode !== "guest") {
+        setAutoContinueRemainingMs(0)
+      }
       return
     }
 
@@ -499,7 +994,40 @@ export default function Trivia() {
       window.clearTimeout(timeoutId)
       setAutoContinueRemainingMs(0)
     }
-  }, [phase, settings.autoContinueAfterReveal, continueAfterReveal])
+  }, [phase, settings.autoContinueAfterReveal, playMode, continueAfterReveal])
+
+  useEffect(() => {
+    if (setupMode === "host" && phase === "setup") {
+      const nextLobbyPlayers = syncHostLobbyPlayers()
+      broadcastLobbySync(nextLobbyPlayers)
+    }
+  }, [setupMode, phase, hostName, settings, syncHostLobbyPlayers, broadcastLobbySync])
+
+  useEffect(() => {
+    if (playMode !== "host" || phase === "setup" || players.length === 0) {
+      return
+    }
+
+    const snapshot: BroadcastGameState = {
+      phase,
+      players,
+      currentTurn,
+      activeQuestion,
+      revealState,
+      secondsLeft,
+      settings,
+      gameError,
+      autoContinueRemainingMs,
+    }
+
+    hostConnectionsRef.current.forEach((connection) => {
+      sendChannelMessage(connection.channel, {
+        type: "state-sync",
+        state: snapshot,
+        yourPlayerId: connection.playerId,
+      })
+    })
+  }, [playMode, phase, players, currentTurn, activeQuestion, revealState, secondsLeft, settings, gameError, autoContinueRemainingMs])
 
   const handleNameChange = (index: number, event: ChangeEvent<HTMLInputElement>) => {
     const nextNames = [...playerNames]
@@ -523,6 +1051,192 @@ export default function Trivia() {
     setPlayerNames((currentNames) => currentNames.filter((_, currentIndex) => currentIndex !== index))
   }
 
+  const handleSetupModeChange = (nextMode: SetupMode) => {
+    if (nextMode === setupMode) {
+      return
+    }
+
+    resetNetworkState(nextMode)
+    setSetupMode(nextMode)
+    setPhase("setup")
+    setPlayers([])
+    setCurrentTurn(0)
+    setActiveQuestion(null)
+    setRevealState(null)
+    setSetupError("")
+    setGameError("")
+    setAnswerLocked(false)
+    setAutoContinueRemainingMs(0)
+  }
+
+  const createHostInvite = async () => {
+    const trimmedHostName = hostName.trim()
+
+    if (!trimmedHostName) {
+      setSetupError("Enter your host player name before creating an invite code.")
+      return
+    }
+
+    setSetupError("")
+    closePendingInvite()
+
+    try {
+      const playerId = createPeerId("guest")
+      const peer = new RTCPeerConnection({ iceServers: [] })
+      const channel = peer.createDataChannel("trivia")
+
+      attachHostConnectionEvents(playerId, peer, channel)
+
+      const offer = await peer.createOffer()
+      await peer.setLocalDescription(offer)
+      await waitForIceGatheringComplete(peer)
+
+      pendingInviteRef.current = {
+        playerId,
+        peer,
+        channel,
+      }
+      setHostInviteCode(encodeSignalPayload(peer.localDescription ?? offer))
+      setHostStatus("Invite code ready. Share it with a guest, then paste their response code below.")
+    } catch {
+      closePendingInvite()
+      setSetupError("Could not create a host invite code in this browser.")
+    }
+  }
+
+  const applyGuestResponseCode = async () => {
+    const pendingInvite = pendingInviteRef.current
+    const candidateCode = hostAnswerCode.trim() || window.prompt("Paste the guest response code:", "")?.trim() || ""
+
+    if (!pendingInvite) {
+      setSetupError("Generate a host invite code before applying a guest response.")
+      return
+    }
+
+    if (!candidateCode) {
+      return
+    }
+
+    try {
+      await pendingInvite.peer.setRemoteDescription(decodeSignalPayload(candidateCode))
+      setHostAnswerCode("")
+      setHostInviteCode("")
+      setHostStatus("Guest response accepted. Finalizing the peer connection...")
+      setSetupError("")
+    } catch {
+      setSetupError("That guest response code could not be read. Double-check and try again.")
+    }
+  }
+
+  const promptForHostCode = () => {
+    const input = window.prompt("Paste the host code to join this trivia game:", joinHostCode)
+
+    if (input === null) {
+      return
+    }
+
+    setJoinHostCode(input.trim())
+    setJoinStatus(input.trim() ? "Host code added. Generate your response code next." : "")
+    setSetupError("")
+  }
+
+  const generateJoinResponse = async () => {
+    const trimmedJoinName = joinName.trim()
+
+    if (!trimmedJoinName) {
+      setSetupError("Enter your player name before joining a hosted match.")
+      return
+    }
+
+    if (!joinHostCode.trim()) {
+      setSetupError("Use the host code prompt first so this device knows which lobby to join.")
+      return
+    }
+
+    setSetupError("")
+
+    if (guestConnectionRef.current) {
+      closeAllConnections()
+      guestConnectionRef.current = null
+    }
+
+    try {
+      const peer = new RTCPeerConnection({ iceServers: [] })
+      guestConnectionRef.current = {
+        peer,
+        channel: null,
+      }
+
+      peer.ondatachannel = (event) => {
+        const channel = event.channel
+        guestConnectionRef.current = {
+          peer,
+          channel,
+        }
+
+        channel.onopen = () => {
+          setJoinStatus("Connected to the host. Joining the lobby...")
+          sendChannelMessage(channel, {
+            type: "join-request",
+            playerName: joinNameRef.current.trim() || "Guest",
+          })
+        }
+
+        channel.onmessage = (messageEvent) => {
+          handleGuestNetworkMessage(String(messageEvent.data))
+        }
+
+        channel.onclose = () => {
+          setJoinStatus("The host connection closed.")
+        }
+      }
+
+      peer.onconnectionstatechange = () => {
+        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
+          setJoinStatus("The host connection closed.")
+        }
+      }
+
+      await peer.setRemoteDescription(decodeSignalPayload(joinHostCode))
+      const answer = await peer.createAnswer()
+      await peer.setLocalDescription(answer)
+      await waitForIceGatheringComplete(peer)
+
+      setJoinResponseCode(encodeSignalPayload(peer.localDescription ?? answer))
+      setJoinStatus("Response code ready. Send it back to the host and wait for them to start the game.")
+    } catch {
+      setSetupError("That host code could not be used. Double-check it and try again.")
+    }
+  }
+
+  const handleAnswerChoice = (answer: string) => {
+    if (!activePlayer) {
+      return
+    }
+
+    if (playMode === "guest") {
+      const guestChannel = guestConnectionRef.current?.channel
+
+      if (!guestChannel || guestChannel.readyState !== "open" || activePlayer.id !== localPlayerId) {
+        return
+      }
+
+      sendChannelMessage(guestChannel, {
+        type: "submit-answer",
+        answer,
+        timedOut: false,
+      })
+      setAnswerLocked(true)
+      return
+    }
+
+    if (playMode === "host" && activePlayer.id !== localPlayerId) {
+      return
+    }
+
+    submitAnswer(answer)
+  }
+
   const progressPercent = totalTurns > 0 ? (currentTurn / totalTurns) * 100 : 0
   const isQuestionCooldown = phase === "loading" && cooldownRequestKind === "question" && cooldownRemainingSeconds > 0
   const isCategoryCooldown = categoriesLoading && cooldownRequestKind === "categories" && cooldownRemainingSeconds > 0
@@ -530,6 +1244,26 @@ export default function Trivia() {
     REVEAL_AUTO_CONTINUE_MS > 0
       ? ((REVEAL_AUTO_CONTINUE_MS - autoContinueRemainingMs) / REVEAL_AUTO_CONTINUE_MS) * 100
       : 0
+  const autoContinueRemainingSeconds = Math.ceil(autoContinueRemainingMs / 1000)
+  const canLocalAnswer =
+    phase === "question" && !answerLocked && (playMode === "local" || activePlayer?.id === localPlayerId)
+  const modeCards = [
+    {
+      id: "local" as const,
+      title: "Local Multiplayer",
+      description: "Take turns on the same device with a game-show scoreboard.",
+    },
+    {
+      id: "host" as const,
+      title: "Host a Game",
+      description: "Create a cross-device lobby and invite players with a host code.",
+    },
+    {
+      id: "join" as const,
+      title: "Join a Game",
+      description: "Paste a host code, return your response code, and play from another device.",
+    },
+  ]
 
   return (
     <div className="space-y-8 text-white">
@@ -537,27 +1271,57 @@ export default function Trivia() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.5em] text-cyan-300">Trivia Showdown</p>
-            <h1 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">
-              Quiz Night
-            </h1>
+            <h1 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">Quiz Night</h1>
             <p className="mt-4 max-w-3xl text-base text-blue-100/85 md:text-lg">
-              Build your own game-show table, rotate players through fresh Open Trivia Database
-              questions, and settle the winner with a final match leaderboard.
+              Build your own game-show table, host a no-server lobby across devices, or join a
+              match with a manual host code exchange.
             </p>
           </div>
 
           <div className="grid min-w-[260px] gap-4 rounded-[1.5rem] border border-cyan-300/20 bg-white/8 p-5 backdrop-blur-sm">
             <div>
               <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Format</p>
-              <p className="mt-2 text-lg font-semibold">{settings.questionsPerPlayer} questions per player</p>
+              <p className="mt-2 text-lg font-semibold">
+                {settings.questionsPerPlayer} questions per player
+              </p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Timer</p>
               <p className="mt-2 text-lg font-semibold">30 seconds per turn</p>
             </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Connection</p>
+              <p className="mt-2 text-lg font-semibold">
+                {setupMode === "local" ? "Same device" : "WebRTC manual code exchange"}
+              </p>
+            </div>
           </div>
         </div>
       </section>
+
+      {phase === "setup" && (
+        <section className="rounded-[2rem] border border-blue-300/20 bg-blue-950/70 p-6 shadow-xl shadow-black/25 backdrop-blur-sm">
+          <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Choose mode</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            {modeCards.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => handleSetupModeChange(mode.id)}
+                className={`rounded-[1.5rem] border p-5 text-left transition ${
+                  setupMode === mode.id
+                    ? "border-cyan-300 bg-cyan-400/10 shadow-lg shadow-cyan-500/10"
+                    : "border-white/10 bg-white/5 hover:border-cyan-300/40 hover:bg-white/8"
+                }`}
+              >
+                <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Mode</p>
+                <h2 className="mt-2 text-2xl font-bold">{mode.title}</h2>
+                <p className="mt-3 text-sm text-blue-100/80">{mode.description}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {players.length > 0 && phase !== "setup" && (
         <section className="rounded-[2rem] border border-blue-300/20 bg-blue-950/70 p-6 shadow-xl shadow-black/25 backdrop-blur-sm">
@@ -585,7 +1349,9 @@ export default function Trivia() {
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {players.map((player, index) => {
-              const isActive = index === activePlayerIndex && (phase === "question" || phase === "loading" || phase === "reveal")
+              const isActive =
+                index === activePlayerIndex &&
+                (phase === "question" || phase === "loading" || phase === "reveal")
               const remainingTurns = settings.questionsPerPlayer - player.answered
 
               return (
@@ -626,7 +1392,7 @@ export default function Trivia() {
         </section>
       )}
 
-      {phase === "setup" && (
+      {phase === "setup" && setupMode === "local" && (
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
             <div className="flex items-center justify-between gap-4">
@@ -647,7 +1413,10 @@ export default function Trivia() {
 
             <div className="mt-6 space-y-4">
               {playerNames.map((name, index) => (
-                <div key={`player-${index}`} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
+                <div
+                  key={`player-${index}`}
+                  className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
                       Player {index + 1}
@@ -719,7 +1488,9 @@ export default function Trivia() {
                   ))}
                 </select>
                 <div className="mt-2 flex items-center justify-between gap-3 text-xs text-blue-100/70">
-                  <span>{categoriesLoading ? "Loading categories..." : `${categories.length} categories ready`}</span>
+                  <span>
+                    {categoriesLoading ? "Loading categories..." : `${categories.length} categories ready`}
+                  </span>
                   {categoriesError && (
                     <button
                       type="button"
@@ -811,11 +1582,363 @@ export default function Trivia() {
 
             <button
               type="button"
-              onClick={startMatch}
+              onClick={startLocalMatch}
               className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30"
             >
               Start showdown
             </button>
+          </div>
+        </section>
+      )}
+
+      {phase === "setup" && setupMode === "host" && (
+        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Host lobby</p>
+            <h2 className="mt-2 text-3xl font-bold">Host a game</h2>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Host player name
+                </label>
+                <input
+                  value={hostName}
+                  onChange={(event) => setHostName(event.target.value)}
+                  placeholder="Enter your name as the host"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Connected players</p>
+                    <p className="mt-2 text-blue-100/75">
+                      Share a host code, then paste each guest's response code to add them.
+                    </p>
+                  </div>
+                  <div className="rounded-full bg-yellow-300 px-4 py-2 text-sm font-black text-blue-950">
+                    {lobbyPlayers.length}
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {lobbyPlayers.length === 0 ? (
+                    <p className="rounded-2xl bg-blue-900/60 px-4 py-3 text-blue-100/80">No lobby players yet.</p>
+                  ) : (
+                    lobbyPlayers.map((player, index) => (
+                      <div
+                        key={player.id}
+                        className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3"
+                      >
+                        <span>
+                          {index + 1}. {player.name}
+                        </span>
+                        <span className="text-xs uppercase tracking-[0.25em] text-cyan-100">
+                          {player.id === HOST_PLAYER_ID ? "Host" : "Guest"}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={createHostInvite}
+                  className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
+                >
+                  Generate host code
+                </button>
+
+                {hostInviteCode && (
+                  <textarea
+                    readOnly
+                    value={hostInviteCode}
+                    className="min-h-36 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-blue-50 outline-none"
+                  />
+                )}
+
+                <textarea
+                  value={hostAnswerCode}
+                  onChange={(event) => setHostAnswerCode(event.target.value)}
+                  placeholder="Paste a guest response code here"
+                  className="min-h-28 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+
+                <button
+                  type="button"
+                  onClick={applyGuestResponseCode}
+                  className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
+                >
+                  Apply guest response code
+                </button>
+              </div>
+
+              {hostStatus && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  {hostStatus}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Round setup</p>
+            <h2 className="mt-2 text-3xl font-bold">Configure the hosted match</h2>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Questions per player
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={settings.questionsPerPlayer}
+                  onChange={(event) =>
+                    setSettings((currentSettings) => ({
+                      ...currentSettings,
+                      questionsPerPlayer: Math.min(20, Math.max(1, Number(event.target.value) || 1)),
+                    }))
+                  }
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Category
+                </label>
+                <select
+                  value={settings.category}
+                  onChange={(event) =>
+                    setSettings((currentSettings) => ({
+                      ...currentSettings,
+                      category: event.target.value,
+                    }))
+                  }
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                >
+                  <option value="">Any Category</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={String(category.id)}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Difficulty
+                </label>
+                <select
+                  value={settings.difficulty}
+                  onChange={(event) =>
+                    setSettings((currentSettings) => ({
+                      ...currentSettings,
+                      difficulty: event.target.value,
+                    }))
+                  }
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                >
+                  <option value="">Any Difficulty</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Question type
+                </label>
+                <select
+                  value={settings.type}
+                  onChange={(event) =>
+                    setSettings((currentSettings) => ({
+                      ...currentSettings,
+                      type: event.target.value,
+                    }))
+                  }
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                >
+                  <option value="">Any Type</option>
+                  <option value="multiple">Multiple Choice</option>
+                  <option value="boolean">True / False</option>
+                </select>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <label className="flex cursor-pointer items-start gap-4">
+                  <input
+                    type="checkbox"
+                    checked={settings.autoContinueAfterReveal}
+                    onChange={(event) =>
+                      setSettings((currentSettings) => ({
+                        ...currentSettings,
+                        autoContinueAfterReveal: event.target.checked,
+                      }))
+                    }
+                    className="mt-1 h-5 w-5 rounded border-white/20 bg-blue-900 text-cyan-300"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                      Auto continue after reveal
+                    </span>
+                    <span className="mt-2 block text-sm text-blue-100/80">
+                      Automatically move to the next player or question after 10 seconds.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {setupError && (
+              <div className="mt-6 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {setupError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={startHostedMatch}
+              disabled={lobbyPlayers.length < 2}
+              className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Start hosted game
+            </button>
+          </div>
+        </section>
+      )}
+
+      {phase === "setup" && setupMode === "join" && (
+        <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Join flow</p>
+            <h2 className="mt-2 text-3xl font-bold">Join a hosted game</h2>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Player name
+                </label>
+                <input
+                  value={joinName}
+                  onChange={(event) => setJoinName(event.target.value)}
+                  placeholder="Enter your player name"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={promptForHostCode}
+                className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
+              >
+                {joinHostCode ? "Change host code" : "Enter host code"}
+              </button>
+
+              {joinHostCode && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  Host code captured. Generate your response code to continue.
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={generateJoinResponse}
+                className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
+              >
+                Generate response code
+              </button>
+
+              {joinResponseCode && (
+                <textarea
+                  readOnly
+                  value={joinResponseCode}
+                  className="min-h-40 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-blue-50 outline-none"
+                />
+              )}
+
+              {joinStatus && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  {joinStatus}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Lobby preview</p>
+            <h2 className="mt-2 text-3xl font-bold">Connected lobby</h2>
+
+            <div className="mt-6 space-y-4">
+              {lobbyPlayers.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-blue-100/80">
+                  Paste a host code, generate your response code, and wait for the host to confirm.
+                </p>
+              ) : (
+                lobbyPlayers.map((player, index) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3"
+                  >
+                    <span>
+                      {index + 1}. {player.name}
+                    </span>
+                    <span className="text-xs uppercase tracking-[0.25em] text-cyan-100">
+                      {player.id === HOST_PLAYER_ID ? "Host" : "Player"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5">
+              <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Host settings</p>
+              <div className="mt-4 space-y-3 text-blue-100/85">
+                <div className="flex items-center justify-between gap-4">
+                  <span>Category</span>
+                  <span className="font-semibold text-white">
+                    {settings.category
+                      ? categories.find((category) => String(category.id) === settings.category)?.name ??
+                        "Custom category"
+                      : "Any Category"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Difficulty</span>
+                  <span className="font-semibold text-white">{formatDifficulty(settings.difficulty)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Question type</span>
+                  <span className="font-semibold text-white">
+                    {settings.type === "multiple"
+                      ? "Multiple Choice"
+                      : settings.type === "boolean"
+                        ? "True / False"
+                        : "Any Type"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Auto continue</span>
+                  <span className="font-semibold text-white">
+                    {settings.autoContinueAfterReveal ? "On" : "Off"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {setupError && (
+              <div className="mt-6 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {setupError}
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -848,13 +1971,15 @@ export default function Trivia() {
                     <h3 className="mt-3 text-2xl font-bold">We couldn't load the next question.</h3>
                     <p className="mt-3 text-blue-100/75">{gameError}</p>
                     <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                      <button
-                        type="button"
-                        onClick={() => setLoadAttempt((currentAttempt) => currentAttempt + 1)}
-                        className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
-                      >
-                        Retry question
-                      </button>
+                      {(playMode === "host" || playMode === "local") && (
+                        <button
+                          type="button"
+                          onClick={() => setLoadAttempt((currentAttempt) => currentAttempt + 1)}
+                          className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
+                        >
+                          Retry question
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={resetMatch}
@@ -870,15 +1995,15 @@ export default function Trivia() {
                       <div className="h-8 w-8 animate-spin rounded-full border-4 border-cyan-200/30 border-t-cyan-200" />
                     </div>
                     <p className="mt-5 text-sm uppercase tracking-[0.3em] text-cyan-200">
-                      {activePlayer.name}, Get ready
+                      {activePlayer.name}, get ready
                     </p>
-                    <h3 className="mt-3 text-3xl font-black">
-                      Loading the next challenge...
-                    </h3>
+                    <h3 className="mt-3 text-3xl font-black">Loading the next challenge...</h3>
                     <p className="mt-3 text-blue-100/75">
                       {isQuestionCooldown
                         ? `Too fast! The next trivia question for ${activePlayer.name} will be requested in ${cooldownRemainingSeconds} second${cooldownRemainingSeconds === 1 ? "" : "s"}.`
-                        : `Pulling a fresh question from Trivia Database for ${activePlayer.name}.`}
+                        : playMode === "guest"
+                          ? `Waiting for the host to send the next question for ${activePlayer.name}.`
+                          : `Pulling a fresh question from Trivia Database for ${activePlayer.name}.`}
                     </p>
                     <div className="mx-auto mt-8 h-3 w-full max-w-md overflow-hidden rounded-full bg-white/10">
                       <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-cyan-400 to-yellow-300" />
@@ -924,14 +2049,16 @@ export default function Trivia() {
                           : isSelectedAnswer
                             ? "border-red-300 bg-red-500/15 text-red-50"
                             : "border-white/10 bg-white/5 text-blue-100/80"
-                        : "border-blue-300/20 bg-blue-900/70 text-white hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-blue-800"
+                        : canLocalAnswer
+                          ? "border-blue-300/20 bg-blue-900/70 text-white hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-blue-800"
+                          : "border-white/10 bg-white/5 text-blue-100/70"
 
                     return (
                       <button
                         key={answer}
                         type="button"
-                        onClick={() => submitAnswer(answer)}
-                        disabled={phase !== "question" || answerLocked}
+                        onClick={() => handleAnswerChoice(answer)}
+                        disabled={!canLocalAnswer}
                         className={`min-h-24 rounded-[1.5rem] border px-5 py-4 text-left text-lg font-semibold shadow-lg shadow-black/10 transition ${revealClasses} disabled:cursor-default`}
                       >
                         {answer}
@@ -951,7 +2078,11 @@ export default function Trivia() {
               <div className="mt-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-400/10 p-5">
                 <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Live turn</p>
                 <p className="mt-3 text-lg text-white/90">
-                  {activePlayer.name}, choose an answer before the countdown hits zero.
+                  {canLocalAnswer
+                    ? `${activePlayer.name}, choose an answer before the countdown hits zero.`
+                    : playMode === "guest"
+                      ? `Waiting for ${activePlayer.name}'s answer to be sent from their device.`
+                      : `${activePlayer.name} is answering from another device.`}
                 </p>
               </div>
             )}
@@ -983,17 +2114,25 @@ export default function Trivia() {
                   Correct answer: {activeQuestion.correctAnswer}
                 </p>
 
-                <button
-                  type="button"
-                  onClick={continueAfterReveal}
-                  className="mt-6 w-full rounded-full bg-gradient-to-r from-cyan-400 to-yellow-300 px-5 py-3 text-lg font-black uppercase tracking-[0.2em] text-blue-950 transition hover:-translate-y-0.5"
-                >
-                  {currentTurn + 1 >= totalTurns ? "Show leaderboard" : "Next player"}
-                </button>
+                {playMode !== "guest" && (
+                  <button
+                    type="button"
+                    onClick={continueAfterReveal}
+                    className="mt-6 w-full rounded-full bg-gradient-to-r from-cyan-400 to-yellow-300 px-5 py-3 text-lg font-black uppercase tracking-[0.2em] text-blue-950 transition hover:-translate-y-0.5"
+                  >
+                    {currentTurn + 1 >= totalTurns ? "Show leaderboard" : "Next player"}
+                  </button>
+                )}
 
-                {settings.autoContinueAfterReveal && (
+                {settings.autoContinueAfterReveal && autoContinueRemainingMs > 0 && (
                   <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-400/8 p-4">
-                    <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <div className="flex items-center gap-3">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-cyan-200/30 border-t-cyan-200" />
+                      <p className="text-sm text-cyan-50">
+                        Auto continuing in {autoContinueRemainingSeconds} second{autoContinueRemainingSeconds === 1 ? "" : "s"}.
+                      </p>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-yellow-300 transition-all duration-100"
                         style={{ width: `${Math.min(Math.max(autoContinueProgressPercent, 0), 100)}%` }}
@@ -1009,11 +2148,16 @@ export default function Trivia() {
                 <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Turn order</p>
                 <ol className="mt-4 space-y-3">
                   {players.map((player, index) => (
-                    <li key={player.id} className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3">
+                    <li
+                      key={player.id}
+                      className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3"
+                    >
                       <span>
                         {index + 1}. {player.name}
                       </span>
-                      <span className="text-sm text-blue-200/80">{player.answered}/{settings.questionsPerPlayer}</span>
+                      <span className="text-sm text-blue-200/80">
+                        {player.answered}/{settings.questionsPerPlayer}
+                      </span>
                     </li>
                   ))}
                 </ol>
@@ -1027,7 +2171,8 @@ export default function Trivia() {
                   <span>Category</span>
                   <span className="font-semibold text-white">
                     {settings.category
-                      ? categories.find((category) => String(category.id) === settings.category)?.name ?? "Custom category"
+                      ? categories.find((category) => String(category.id) === settings.category)?.name ??
+                        "Custom category"
                       : "Any Category"}
                   </span>
                 </div>
@@ -1043,6 +2188,16 @@ export default function Trivia() {
                       : settings.type === "boolean"
                         ? "True / False"
                         : "Any Type"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Mode</span>
+                  <span className="font-semibold text-white">
+                    {playMode === "local"
+                      ? "Local"
+                      : playMode === "host"
+                        ? "Hosted"
+                        : "Joined remotely"}
                   </span>
                 </div>
               </div>
@@ -1117,8 +2272,8 @@ export default function Trivia() {
 
             <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
               <p>
-                Play again to return to setup with the same selected trivia settings and enter your
-                contestants for a new current-match leaderboard.
+                Play again to return to setup with the same selected trivia settings and prepare a
+                fresh current-match leaderboard.
               </p>
             </div>
 
