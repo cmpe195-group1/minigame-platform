@@ -8,7 +8,8 @@ import Games from '@/pages/Games'
 import Search from '@/pages/Search'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
-import Trivia from "@/games/Trivia.tsx";
+import Trivia from "@/games/Trivia.tsx"
+import Anagrams from "@/games/Anagrams.tsx"
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')!).render(
                     <Route path="/games" element={<Games />} />
                     <Route path="/games/search" element={<Search />} />
                     <Route path="/games/trivia" element={<Trivia/>} />
+                    <Route path="/games/anagrams" element={<Anagrams />} />
                 </Routes>
             </main>
         </div>
