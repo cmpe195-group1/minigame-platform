@@ -10,48 +10,19 @@ export default function CardGrid() {
   // Static UI-only example cards
     const games = [
         {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
+            "title":"anagrams",
+            "thumbnail":"file.svg",
+            "genre": ["word", "puzzle", "local"]
         },
         {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
+            "title":"trivia",
+            "thumbnail":"globe.svg",
+            "genre": ["trivia", "quiz", "local"]
         },
         {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        },{
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
-        },
-        {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
-        },
-        {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        },
-        {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
-        },
-        {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
-        },
-        {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
+            "title":"uno",
+            "thumbnail":"file.svg",
+            "genre": ["local"]
         }
     ];
 
