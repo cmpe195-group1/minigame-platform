@@ -22,7 +22,7 @@ interface PlayerState {
   hand: UnoCard[]
 }
 
-const TURN_SECONDS = 100
+const TURN_SECONDS = 1000
 const STARTING_HAND_SIZE = 7
 const MIN_PLAYERS = 2
 const MAX_PLAYERS = 6
@@ -97,30 +97,6 @@ function createDeck() {
   }
 
   return shuffleArray(deck)
-}
-
-function getCardFaceLabel(card: UnoCard) {
-  if (card.kind === "number") {
-    return String(card.value)
-  }
-
-  if (card.kind === "skip") {
-    return "⦸"
-  }
-
-  if (card.kind === "reverse") {
-    return "↺"
-  }
-
-  if (card.kind === "drawTwo") {
-    return "+2"
-  }
-
-  if (card.kind === "wild") {
-    return "W"
-  }
-
-  return "+4"
 }
 
 function getCardTitle(card: UnoCard) {
@@ -257,6 +233,34 @@ function getCardBackground(card: UnoCard) {
   }
 
   return `bg-gradient-to-br ${COLOR_CLASSES[card.color].card}`
+}
+
+function getUnoAssetFilename(card: UnoCard) {
+  if (card.kind === "number") {
+    return `${getColorLabel(card.color as PlayableColor)}_${card.value}.svg`
+  }
+
+  if (card.kind === "skip") {
+    return `${getColorLabel(card.color as PlayableColor)}_Skip.svg`
+  }
+
+  if (card.kind === "reverse") {
+    return `${getColorLabel(card.color as PlayableColor)}_Reverse.svg`
+  }
+
+  if (card.kind === "drawTwo") {
+    return `${getColorLabel(card.color as PlayableColor)}_Draw_2.svg`
+  }
+
+  if (card.kind === "wild") {
+    return "Wild.svg"
+  }
+
+  return "Wild_Draw_4.svg"
+}
+
+function getUnoAssetPath(card: UnoCard) {
+  return `/uno/${getUnoAssetFilename(card)}`
 }
 
 function getColorBadgeClasses(color: PlayableColor) {
@@ -1231,18 +1235,12 @@ export default function Uno() {
                     </div>
 
                     {topDiscard && (
-                      <div className={`mt-4 flex h-40 w-full flex-col justify-between rounded-[1.5rem] border border-white/15 p-4 text-white shadow-lg ${getCardBackground(topDiscard)}`}>
-                        <div className="flex items-start justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-[0.25em]">{getCardSubtitle(topDiscard)}</span>
-                          <span className="text-lg font-black uppercase">UNO</span>
-                        </div>
-                        <div className="flex items-center justify-center">
-                          <span className="text-6xl font-black leading-none">{getCardFaceLabel(topDiscard)}</span>
-                        </div>
-                        <div className="flex items-end justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.2em]">
-                          <span>{topDiscard.color === "wild" ? "Wild" : getColorLabel(topDiscard.color)}</span>
-                          <span className="truncate">{getCardTitle(topDiscard)}</span>
-                        </div>
+                      <div className="mt-4 flex h-40 w-full items-center justify-center rounded-[1.5rem] border border-white/15 bg-slate-950/40 p-3 text-white shadow-lg">
+                        <img
+                          src={getUnoAssetPath(topDiscard)}
+                          alt={getCardTitle(topDiscard)}
+                          className="h-full w-auto object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.35)]"
+                        />
                       </div>
                     )}
                   </div>
@@ -1259,14 +1257,14 @@ export default function Uno() {
               </div>
 
               {phase === "playing" && activePlayer && (
-                <section className="flex min-h-0 flex-col overflow-hidden rounded-[2rem] border border-white/15 bg-slate-950/85 p-5 shadow-xl shadow-black/25">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <section className="flex min-h-0 max-h-[28vh] flex-col overflow-hidden rounded-[2rem] border border-white/15 bg-slate-950/85 p-3 shadow-xl shadow-black/25 sm:max-h-[30vh]">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <p className={`text-sm font-semibold uppercase tracking-[0.35em] ${getColorAccent(activeColor)}`}>
                         Hand view
                       </p>
-                      <h3 className="mt-2 text-2xl font-black">{activePlayer.name}'s cards</h3>
-                      <p className="mt-2 text-sm text-blue-100/75">
+                      <h3 className="mt-1 text-xl font-black sm:text-2xl">{activePlayer.name}'s cards</h3>
+                      <p className="mt-1 text-sm text-blue-100/75">
                         {playableCards.length > 0
                           ? `${playableCards.length} playable card${playableCards.length === 1 ? "" : "s"} available this turn.`
                           : "No playable cards in hand yet. Draw once or let the timer run out."}
@@ -1293,49 +1291,55 @@ export default function Uno() {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex min-h-0 gap-4 overflow-x-auto overflow-y-hidden pb-2 pr-1">
-                    {currentPlayerHand.map((card) => {
-                      const isPlayable = canPlayCardFromHand(card)
-                      const isPendingWild = pendingWildCardId === card.id
-                      const isFreshDraw = drawnCardId === card.id
+                  <div className="mt-2 flex-1 min-h-0 overflow-hidden">
+                    <div className="flex h-full items-end gap-1.5 overflow-x-auto overflow-y-hidden pb-1 pr-1">
+                      {currentPlayerHand.map((card) => {
+                        const isPlayable = canPlayCardFromHand(card)
+                        const isPendingWild = pendingWildCardId === card.id
+                        const isFreshDraw = drawnCardId === card.id
 
-                      return (
-                        <motion.button
-                          key={card.id}
-                          type="button"
-                          whileHover={isPlayable ? { y: -8, rotate: -1 } : undefined}
-                          whileTap={isPlayable ? { scale: 0.98 } : undefined}
-                          onClick={() => handleCardSelection(card)}
-                          disabled={!isPlayable}
-                          className={`flex h-full min-h-52 w-40 min-w-40 flex-none flex-col justify-between rounded-[1.75rem] border p-4 text-left text-white shadow-lg transition ${getCardBackground(card)} ${
-                            isPlayable
-                              ? "border-white/30 hover:border-white/60"
-                              : "border-white/10 opacity-45"
-                          } ${isPendingWild ? "ring-4 ring-white/50" : ""}`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-xs uppercase tracking-[0.25em] text-white/80">{getCardSubtitle(card)}</p>
-                              <p className="mt-2 truncate text-sm font-semibold uppercase">{getCardTitle(card)}</p>
+                        return (
+                          <motion.button
+                            key={card.id}
+                            type="button"
+                            whileHover={isPlayable ? { y: -4, rotate: -1 } : undefined}
+                            whileTap={isPlayable ? { scale: 0.98 } : undefined}
+                            onClick={() => handleCardSelection(card)}
+                            disabled={!isPlayable}
+                            className={`relative h-full shrink-0 overflow-hidden rounded-[1.1rem] border bg-slate-950/35 text-left text-white shadow-lg transition ${
+                              isPlayable
+                                ? "border-white/30 hover:border-white/60"
+                                : "border-white/10 opacity-45"
+                            } ${isPendingWild ? "ring-4 ring-white/50" : ""}`}
+                            style={{ aspectRatio: "5 / 7" }}
+                            aria-label={getCardTitle(card)}
+                          >
+                            <img
+                              src={getUnoAssetPath(card)}
+                              alt={getCardTitle(card)}
+                              className="h-full w-full object-contain"
+                              draggable={false}
+                            />
+
+                            <div className="pointer-events-none absolute inset-x-1.5 top-1.5 flex items-start justify-end gap-1">
+                              {isFreshDraw && (
+                                <span className="rounded-full bg-yellow-300 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-[0.16em] text-slate-950 sm:text-[8px]">
+                                  Drew
+                                </span>
+                              )}
                             </div>
-                            {isFreshDraw && (
-                              <span className="rounded-full bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em]">
-                                Drew
-                              </span>
-                            )}
-                          </div>
 
-                          <div className="flex items-center justify-center py-2">
-                            <span className="text-7xl font-black leading-none">{getCardFaceLabel(card)}</span>
-                          </div>
-
-                          <div className="flex items-end justify-between gap-3 text-xs font-semibold uppercase tracking-[0.25em] text-white/85">
-                            <span>{card.color === "wild" ? "Wild" : getColorLabel(card.color)}</span>
-                            <span>{isPlayable ? "Playable" : "Locked"}</span>
-                          </div>
-                        </motion.button>
-                      )
-                    })}
+                            <div className="pointer-events-none absolute inset-x-1.5 bottom-1.5 flex items-end justify-end gap-1">
+                              {!isPlayable && (
+                                <span className="rounded-full bg-slate-950/70 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-[0.16em] text-white sm:text-[8px]">
+                                  Locked
+                                </span>
+                              )}
+                            </div>
+                          </motion.button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </section>
               )}
