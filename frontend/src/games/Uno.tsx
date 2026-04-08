@@ -22,7 +22,14 @@ interface PlayerState {
   hand: UnoCard[]
 }
 
-const TURN_SECONDS = 1000
+interface PendingTurnState {
+  currentPlayerIndex: number
+  direction: Direction
+  activeColor: PlayableColor
+  message: string
+}
+
+const TURN_SECONDS = 120
 const STARTING_HAND_SIZE = 7
 const MIN_PLAYERS = 2
 const MAX_PLAYERS = 6
@@ -271,10 +278,6 @@ function getColorAccent(color: PlayableColor) {
   return COLOR_CLASSES[color].accent
 }
 
-function getColorRing(color: PlayableColor) {
-  return COLOR_CLASSES[color].ring
-}
-
 function buildAnimatedCardOffsets(length: number) {
   return Array.from({ length }, (_, index) => ({
     rotate: index * 8 - ((length - 1) * 8) / 2,
@@ -296,6 +299,8 @@ export default function Uno() {
   const [secondsLeft, setSecondsLeft] = useState(TURN_SECONDS)
   const [hasDrawnThisTurn, setHasDrawnThisTurn] = useState(false)
   const [drawnCardId, setDrawnCardId] = useState<string | null>(null)
+  const [awaitingEndTurnReason, setAwaitingEndTurnReason] = useState<"drawBlocked" | "noDraw" | "timeout" | null>(null)
+  const [pendingTurnState, setPendingTurnState] = useState<PendingTurnState | null>(null)
   const [pendingWildCardId, setPendingWildCardId] = useState<string | null>(null)
   const [setupError, setSetupError] = useState("")
   const [turnMessage, setTurnMessage] = useState("Set the table and start a classic local UNO match.")
@@ -305,7 +310,7 @@ export default function Uno() {
   const topDiscard = discardPile[discardPile.length - 1] ?? null
   const currentPlayerHand = activePlayer?.hand ?? []
   const playableCards = currentPlayerHand.filter((card) => isPlayableCard(card, topDiscard, activeColor, currentPlayerHand))
-  const directionLabel = direction === 1 ? "Clockwise" : "Counter-clockwise"
+  const isAwaitingEndTurn = Boolean(awaitingEndTurnReason || pendingTurnState)
   const handoffFan = useMemo(() => buildAnimatedCardOffsets(5), [])
 
   const modeCards = [
@@ -338,6 +343,8 @@ export default function Uno() {
     setSecondsLeft(TURN_SECONDS)
     setHasDrawnThisTurn(false)
     setDrawnCardId(null)
+    setAwaitingEndTurnReason(null)
+    setPendingTurnState(null)
     setPendingWildCardId(null)
     setWinnerId(null)
     setTurnMessage("Set the table and start a classic local UNO match.")
@@ -365,6 +372,8 @@ export default function Uno() {
       setSecondsLeft(TURN_SECONDS)
       setHasDrawnThisTurn(false)
       setDrawnCardId(null)
+      setAwaitingEndTurnReason(null)
+      setPendingTurnState(null)
       setPendingWildCardId(null)
     },
     [],
@@ -376,6 +385,8 @@ export default function Uno() {
     setSecondsLeft(TURN_SECONDS)
     setHasDrawnThisTurn(false)
     setDrawnCardId(null)
+    setAwaitingEndTurnReason(null)
+    setPendingTurnState(null)
     setPendingWildCardId(null)
   }, [])
 
@@ -461,6 +472,8 @@ export default function Uno() {
       setSecondsLeft(TURN_SECONDS)
       setHasDrawnThisTurn(false)
       setDrawnCardId(null)
+      setAwaitingEndTurnReason(null)
+      setPendingTurnState(null)
       setPendingWildCardId(null)
       return
     }
@@ -527,6 +540,8 @@ export default function Uno() {
       setSecondsLeft(0)
       setHasDrawnThisTurn(false)
       setDrawnCardId(null)
+      setAwaitingEndTurnReason(null)
+      setPendingTurnState(null)
       setPendingWildCardId(null)
     },
     [],
@@ -635,15 +650,22 @@ export default function Uno() {
         message = `${activePlayer.name} called ${getColorLabel(resolvedColor)} and made ${nextPlayers[targetIndex].name} draw ${drawResult.drawnCards.length}.`
       }
 
-      commitNextTurn({
-        players: nextPlayers,
-        drawPile: nextDrawPile,
-        discardPile: nextDiscardPile,
+      setPlayers(nextPlayers)
+      setDrawPile(nextDrawPile)
+      setDiscardPile(nextDiscardPile)
+      setDirection(nextDirection)
+      setActiveColor(resolvedColor)
+      setTurnMessage(`${message} End the turn to continue.`)
+      setHasDrawnThisTurn(false)
+      setDrawnCardId(null)
+      setAwaitingEndTurnReason(null)
+      setPendingTurnState({
         currentPlayerIndex: nextPlayerIndex,
         direction: nextDirection,
         activeColor: resolvedColor,
         message,
       })
+      setPendingWildCardId(null)
     },
     [
       phase,
@@ -663,6 +685,10 @@ export default function Uno() {
   )
 
   const handleCardSelection = (card: UnoCard) => {
+    if (isAwaitingEndTurn) {
+      return
+    }
+
     if (card.kind === "wild" || card.kind === "wildDrawFour") {
       setPendingWildCardId(card.id)
       return
@@ -672,23 +698,17 @@ export default function Uno() {
   }
 
   const handleDrawCard = useCallback(() => {
-    if (phase !== "playing" || !activePlayer || hasDrawnThisTurn) {
+    if (phase !== "playing" || !activePlayer || hasDrawnThisTurn || isAwaitingEndTurn) {
       return
     }
 
     const drawResult = drawCards(drawPile, discardPile, 1)
 
     if (drawResult.drawnCards.length === 0) {
-      const nextPlayerIndex = getNextPlayerIndex(players.length, currentPlayerIndex, direction, 1)
-      commitNextTurn({
-        players,
-        drawPile: drawResult.drawPile,
-        discardPile: drawResult.discardPile,
-        currentPlayerIndex: nextPlayerIndex,
-        direction,
-        activeColor,
-        message: `${activePlayer.name} had no card to draw, so the turn was skipped.`,
-      })
+      setDrawPile(drawResult.drawPile)
+      setDiscardPile(drawResult.discardPile)
+      setAwaitingEndTurnReason("noDraw")
+      setTurnMessage(`${activePlayer.name} had no card to draw. End the turn to continue.`)
       return
     }
 
@@ -707,76 +727,85 @@ export default function Uno() {
     setDiscardPile(drawResult.discardPile)
     setHasDrawnThisTurn(true)
     setDrawnCardId(drawnCard.id)
+    setAwaitingEndTurnReason(null)
     setPendingWildCardId(null)
 
     const updatedHand = nextPlayers[currentPlayerIndex].hand
     const isPlayable = isPlayableCard(drawnCard, topDiscard, activeColor, updatedHand)
 
     if (!isPlayable) {
-      const nextPlayerIndex = getNextPlayerIndex(players.length, currentPlayerIndex, direction, 1)
+      setAwaitingEndTurnReason("drawBlocked")
+      setTurnMessage(`${activePlayer.name} drew ${getCardTitle(drawnCard)} and cannot play it. End the turn to continue.`)
+      return
+    }
+
+    setTurnMessage(`${activePlayer.name} drew a playable card. Play it now or end the turn.`)
+  }, [phase, activePlayer, hasDrawnThisTurn, isAwaitingEndTurn, drawPile, discardPile, players, currentPlayerIndex, direction, activeColor, topDiscard])
+
+  const handleEndTurn = useCallback(() => {
+    if (phase !== "playing" || !activePlayer || (!hasDrawnThisTurn && !awaitingEndTurnReason && !pendingTurnState)) {
+      return
+    }
+
+    if (pendingTurnState) {
       commitNextTurn({
-        players: nextPlayers,
-        drawPile: drawResult.drawPile,
-        discardPile: drawResult.discardPile,
-        currentPlayerIndex: nextPlayerIndex,
-        direction,
-        activeColor,
-        message: `${activePlayer.name} drew ${getCardTitle(drawnCard)} and had to skip the turn.`,
+        players,
+        drawPile,
+        discardPile,
+        currentPlayerIndex: pendingTurnState.currentPlayerIndex,
+        direction: pendingTurnState.direction,
+        activeColor: pendingTurnState.activeColor,
+        message: pendingTurnState.message,
       })
       return
     }
 
-    setTurnMessage(`${activePlayer.name} drew a playable card. Play it now or keep it and pass.`)
+    const nextPlayerIndex = getNextPlayerIndex(players.length, currentPlayerIndex, direction, 1)
+    const message =
+      awaitingEndTurnReason === "timeout"
+        ? `${activePlayer.name} ran out of time and ended the turn.`
+        : awaitingEndTurnReason === "noDraw"
+          ? `${activePlayer.name} had no card to draw and ended the turn.`
+          : awaitingEndTurnReason === "drawBlocked"
+            ? `${activePlayer.name} could not play the drawn card and ended the turn.`
+            : `${activePlayer.name} kept the drawn card and ended the turn.`
+
+    commitNextTurn({
+      players,
+      drawPile,
+      discardPile,
+      currentPlayerIndex: nextPlayerIndex,
+      direction,
+      activeColor,
+      message,
+    })
   }, [
     phase,
     activePlayer,
     hasDrawnThisTurn,
+    awaitingEndTurnReason,
+    pendingTurnState,
+    players,
     drawPile,
     discardPile,
-    players,
     currentPlayerIndex,
     direction,
     activeColor,
-    topDiscard,
     commitNextTurn,
   ])
 
-  const handlePassAfterDraw = useCallback(() => {
-    if (phase !== "playing" || !activePlayer || !hasDrawnThisTurn) {
-      return
-    }
-
-    const nextPlayerIndex = getNextPlayerIndex(players.length, currentPlayerIndex, direction, 1)
-    commitNextTurn({
-      players,
-      drawPile,
-      discardPile,
-      currentPlayerIndex: nextPlayerIndex,
-      direction,
-      activeColor,
-      message: `${activePlayer.name} kept the drawn card and passed the turn.`,
-    })
-  }, [phase, activePlayer, hasDrawnThisTurn, players, drawPile, discardPile, currentPlayerIndex, direction, activeColor, commitNextTurn])
-
   const handleTimeout = useCallback(() => {
-    if (phase !== "playing" || !activePlayer) {
+    if (phase !== "playing" || !activePlayer || awaitingEndTurnReason || pendingTurnState) {
       return
     }
 
-    const nextPlayerIndex = getNextPlayerIndex(players.length, currentPlayerIndex, direction, 1)
-    commitNextTurn({
-      players,
-      drawPile,
-      discardPile,
-      currentPlayerIndex: nextPlayerIndex,
-      direction,
-      activeColor,
-      message: `${activePlayer.name} ran out of time, so the turn was automatically skipped.`,
-    })
-  }, [phase, activePlayer, players, drawPile, discardPile, currentPlayerIndex, direction, activeColor, commitNextTurn])
+    setAwaitingEndTurnReason("timeout")
+    setPendingWildCardId(null)
+    setTurnMessage(`${activePlayer.name}'s timer expired. End the turn to continue.`)
+  }, [phase, activePlayer, awaitingEndTurnReason, pendingTurnState])
 
   useEffect(() => {
-    if (phase !== "playing") {
+    if (phase !== "playing" || awaitingEndTurnReason || pendingTurnState) {
       return
     }
 
@@ -790,10 +819,10 @@ export default function Uno() {
     }, 1000)
 
     return () => window.clearTimeout(timeoutId)
-  }, [phase, secondsLeft, handleTimeout])
+  }, [phase, secondsLeft, awaitingEndTurnReason, pendingTurnState, handleTimeout])
 
   const canPlayCardFromHand = (card: UnoCard) => {
-    if (!activePlayer || phase !== "playing") {
+    if (!activePlayer || phase !== "playing" || isAwaitingEndTurn) {
       return false
     }
 
@@ -849,13 +878,10 @@ export default function Uno() {
 
             <div className="flex flex-wrap gap-3 text-sm font-semibold">
               <span className="rounded-full border border-white/10 bg-white/8 px-4 py-2 text-blue-100">
-                Same-device privacy mode
+                Same-device mode
               </span>
               <span className="rounded-full border border-white/10 bg-white/8 px-4 py-2 text-blue-100">
                 30-second turns
-              </span>
-              <span className={`rounded-full px-4 py-2 font-black uppercase ${getColorBadgeClasses(activeColor)}`}>
-                {getColorLabel(activeColor)}
               </span>
             </div>
           </div>
@@ -1096,7 +1122,7 @@ export default function Uno() {
           style={{ height: activeTableViewportHeight }}
         >
           <div className="rounded-[2rem] border border-white/15 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 shadow-2xl shadow-black/30 md:p-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-blue-200">Table status</p>
                 <h2 className="mt-2 text-2xl font-black md:text-3xl">
@@ -1105,44 +1131,14 @@ export default function Uno() {
                 <p className="mt-2 max-w-3xl text-sm text-blue-100/75">{turnMessage}</p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className={`rounded-[1.5rem] border border-white/10 bg-white/5 px-5 py-4 ring-1 ${getColorRing(activeColor)}`}>
-                  <p className="text-xs uppercase tracking-[0.3em] text-blue-200">Active color</p>
-                  <div className="mt-2 flex items-center gap-3">
-                    <span className={`rounded-full px-4 py-2 text-sm font-black uppercase ${getColorBadgeClasses(activeColor)}`}>
-                      {getColorLabel(activeColor)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="rounded-[1.5rem] border border-white/10 bg-white/5 px-5 py-4">
-                  <p className="text-xs uppercase tracking-[0.3em] text-blue-200">Direction</p>
-                  <p className="mt-2 text-xl font-black text-white">{directionLabel}</p>
-                </div>
-
+              <div className="flex flex-wrap gap-3 xl:max-w-[62%] xl:justify-end">
                 <div className="rounded-[1.5rem] border border-white/10 bg-white/5 px-5 py-4">
                   <p className="text-xs uppercase tracking-[0.3em] text-blue-200">Timer</p>
                   <p className={`mt-2 text-2xl font-black ${secondsLeft <= 10 ? "text-red-300" : "text-yellow-200"}`}>
                     {phase === "finished" ? "—" : `${secondsLeft}s`}
                   </p>
                 </div>
-              </div>
-            </div>
-          </div>
 
-          <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[0.82fr_1.18fr]">
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-[2rem] border border-white/15 bg-slate-950/85 p-5 shadow-xl shadow-black/25">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.35em] text-blue-200">Players</p>
-                  <h3 className="mt-2 text-xl font-bold">Table order</h3>
-                </div>
-                <div className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-blue-100">
-                  {players.length} players
-                </div>
-              </div>
-
-              <div className="mt-4 grid min-h-0 gap-3 overflow-y-auto pr-1 md:grid-cols-2">
                 {players.map((player, index) => {
                   const isActive = index === currentPlayerIndex && phase !== "finished"
                   const isWinner = player.id === winnerId
@@ -1150,7 +1146,7 @@ export default function Uno() {
                   return (
                     <div
                       key={player.id}
-                      className={`rounded-[1.5rem] border p-5 transition-all ${
+                      className={`min-w-[150px] flex-1 rounded-[1.5rem] border p-3 transition-all sm:min-w-[160px] sm:flex-none sm:w-[172px] ${
                         isWinner
                           ? "border-yellow-300/60 bg-yellow-300/10"
                           : isActive
@@ -1158,27 +1154,27 @@ export default function Uno() {
                             : "border-white/10 bg-white/5"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-xs uppercase tracking-[0.3em] text-blue-200">
+                          <p className="text-[10px] uppercase tracking-[0.22em] text-blue-200">
                             {isWinner ? "Winner" : isActive ? "Now playing" : "Waiting"}
                           </p>
-                          <h4 className="mt-2 truncate text-xl font-bold">{player.name}</h4>
+                          <h4 className="mt-1 truncate text-base font-bold">{player.name}</h4>
                         </div>
-                        <div className="rounded-full bg-slate-900 px-4 py-2 text-center">
-                          <p className="text-xs uppercase tracking-[0.25em] text-blue-200">Cards</p>
-                          <p className="mt-1 text-2xl font-black text-white">{player.hand.length}</p>
+                        <div className="rounded-full bg-slate-900 px-3 py-1.5 text-center">
+                          <p className="text-[9px] uppercase tracking-[0.2em] text-blue-200">Cards</p>
+                          <p className="mt-0.5 text-lg font-black text-white">{player.hand.length}</p>
                         </div>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="mt-3 flex flex-wrap gap-1.5">
                         {player.hand.length === 1 && (
-                          <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-black uppercase tracking-[0.25em] text-white">
+                          <span className="rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-white">
                             UNO
                           </span>
                         )}
                         {isActive && phase === "playing" && (
-                          <span className="rounded-full bg-blue-500/70 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-white">
+                          <span className="rounded-full bg-blue-500/70 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white">
                             Device holder
                           </span>
                         )}
@@ -1188,73 +1184,66 @@ export default function Uno() {
                 })}
               </div>
             </div>
+          </div>
 
-            <div className="grid min-h-0 gap-4 xl:grid-rows-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <div className="flex min-h-0 flex-col overflow-hidden rounded-[2rem] border border-white/15 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-5 shadow-xl shadow-black/25">
+          <div className="grid min-h-0 flex-1 gap-4">
+            <div className="grid min-h-0 gap-4 md:grid-cols-2">
+              <section className="flex min-h-0 flex-col rounded-[2rem] border border-white/15 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-5 shadow-xl shadow-black/25">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-blue-200">Center table</p>
-                    <h3 className="mt-2 text-xl font-bold">Draw and discard</h3>
+                    <p className="text-xs uppercase tracking-[0.25em] text-blue-200">Draw pile</p>
+                    <h3 className="mt-2 text-lg font-bold">Pull one card</h3>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-white">
                     {drawPile.length} left
                   </span>
                 </div>
 
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.25em] text-blue-200">Draw pile</p>
-                        <h4 className="mt-2 text-lg font-bold">Pull one card</h4>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleDrawCard}
-                      disabled={phase !== "playing" || hasDrawnThisTurn || !activePlayer}
-                      className="mt-4 flex h-40 w-full items-center justify-center rounded-[1.5rem] border border-white/15 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 text-center transition hover:-translate-y-1 hover:border-yellow-200/40 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <div>
-                        <p className="text-3xl font-black tracking-[0.25em] text-white">UNO</p>
-                        <p className="mt-2 text-sm text-blue-100/75">Draw a single card</p>
-                      </div>
-                    </button>
+                <button
+                  type="button"
+                  onClick={handleDrawCard}
+                  disabled={phase !== "playing" || hasDrawnThisTurn || !activePlayer || isAwaitingEndTurn}
+                  className="mt-4 flex h-40 w-full items-center justify-center rounded-[1.5rem] border border-white/15 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 text-center transition hover:-translate-y-1 hover:border-yellow-200/40 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div>
+                    <p className="text-3xl font-black tracking-[0.25em] text-white">UNO</p>
+                    <p className="mt-2 text-sm text-blue-100/75">Draw a single card</p>
                   </div>
+                </button>
+              </section>
 
-                  <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.25em] text-blue-200">Discard pile</p>
-                        <h4 className="mt-2 text-lg font-bold">Top card</h4>
-                      </div>
-                      <span className={`rounded-full px-3 py-1 text-sm font-semibold ${getColorBadgeClasses(activeColor)}`}>
-                        {getColorLabel(activeColor)}
-                      </span>
-                    </div>
-
-                    {topDiscard && (
-                      <div className="mt-4 flex h-40 w-full items-center justify-center rounded-[1.5rem] border border-white/15 bg-slate-950/40 p-3 text-white shadow-lg">
-                        <img
-                          src={getUnoAssetPath(topDiscard)}
-                          alt={getCardTitle(topDiscard)}
-                          className="h-full w-auto object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.35)]"
-                        />
-                      </div>
-                    )}
+              <section className="flex min-h-0 flex-col rounded-[2rem] border border-white/15 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-5 shadow-xl shadow-black/25">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.25em] text-blue-200">Discard pile</p>
+                    <h3 className="mt-2 text-lg font-bold">Top card</h3>
                   </div>
+                  <span className={`rounded-full px-3 py-1 text-sm font-semibold ${getColorBadgeClasses(activeColor)}`}>
+                    {getColorLabel(activeColor)}
+                  </span>
                 </div>
 
-                <div className="mt-4 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-sm text-blue-100/80">
-                  <p className="font-semibold uppercase tracking-[0.25em] text-blue-200">Turn reminder</p>
-                  <ul className="mt-2 space-y-1.5 text-sm">
-                    <li>Match color, number, action, or play a wild.</li>
-                    <li>Draw once. If it works, only that drawn card may be played.</li>
-                    <li>Timeout means the turn skips automatically.</li>
-                  </ul>
-                </div>
-              </div>
+                {topDiscard && (
+                  <div className="mt-4 flex h-40 w-full items-center justify-center rounded-[1.5rem] border border-white/15 bg-slate-950/40 p-3 text-white shadow-lg">
+                    <img
+                      src={getUnoAssetPath(topDiscard)}
+                      alt={getCardTitle(topDiscard)}
+                      className="h-full w-auto object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.35)]"
+                    />
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,0.55fr)_minmax(0,1.45fr)]">
+              <section className="rounded-[2rem] border border-white/15 bg-slate-950/85 p-4 text-sm text-blue-100/80 shadow-xl shadow-black/25">
+                <p className="font-semibold uppercase tracking-[0.25em] text-blue-200">Turn reminder</p>
+                <ul className="mt-2 space-y-1.5 text-sm">
+                  <li>Match color, number, action, or play a wild.</li>
+                  <li>Draw once. If it works, only that drawn card may be played.</li>
+                  <li>When the turn is over, use End turn to continue.</li>
+                </ul>
+              </section>
 
               {phase === "playing" && activePlayer && (
                 <section className="flex min-h-0 max-h-[28vh] flex-col overflow-hidden rounded-[2rem] border border-white/15 bg-slate-950/85 p-3 shadow-xl shadow-black/25 sm:max-h-[30vh]">
@@ -1275,18 +1264,18 @@ export default function Uno() {
                       <button
                         type="button"
                         onClick={handleDrawCard}
-                        disabled={hasDrawnThisTurn}
+                        disabled={hasDrawnThisTurn || isAwaitingEndTurn}
                         className="rounded-full bg-yellow-300 px-5 py-3 font-semibold text-slate-900 transition hover:bg-yellow-200 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Draw card
                       </button>
                       <button
                         type="button"
-                        onClick={handlePassAfterDraw}
-                        disabled={!hasDrawnThisTurn}
+                        onClick={handleEndTurn}
+                        disabled={!hasDrawnThisTurn && !awaitingEndTurnReason && !pendingTurnState}
                         className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Keep drawn card &amp; pass
+                        End turn
                       </button>
                     </div>
                   </div>
