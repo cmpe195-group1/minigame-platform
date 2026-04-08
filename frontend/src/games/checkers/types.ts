@@ -20,4 +20,6 @@ export interface CheckersState {
 
 export type Action =
   | { type: "SELECT"; x: number; y: number }
-  | { type: "MOVE"; x: number; y: number };
+  | { type: "MOVE"; x: number; y: number }
+  | { type: "RESET" }
+  | { type: "UNDO" };

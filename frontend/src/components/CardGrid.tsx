@@ -4,48 +4,14 @@ export default function CardGrid() {
   // Static UI-only example cards
     const games = [
         {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
+            "title":"chess",
+            "thumbnail":"chess_thumbnail.jpg",
+            "genre": ["strategy", "board"]
         },
         {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
-        },
-        {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        },{
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
-        },
-        {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
-        },
-        {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        },
-        {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
-        },
-        {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
-        },
-        {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
+            "title":"checkers",
+            "thumbnail":"checkers_thumbnail.jfif",
+            "genre": ["strategy", "board"]
         }
     ];
 

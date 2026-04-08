@@ -71,6 +71,15 @@ export class CheckersScene extends Phaser.Scene {
             20,
             pieceColor
           );
+
+          if (piece.king) {
+            this.add.circle(
+              x * TILE_SIZE + TILE_SIZE / 2,
+              y * TILE_SIZE + TILE_SIZE / 2,
+              10,
+              pieceColor === 0xffffff ? 0xffff00 : 0xff0000
+            );
+          }
         }
       }
     }
