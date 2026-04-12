@@ -1,0 +1,24 @@
+=c:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\.gradle-user-home : The term 
+'=c:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\.gradle-user-home' is not 
+recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if 
+a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ ='c:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=c:\Users\nhath...radle-user-home:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=8081 : The term '=8081' is not recognized as the name of a cmdlet, function, script file, or operable program. Check 
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:107
++ ... ain_project\group-project-team-34\.gradle-user-home'; ='8081'; Set-Lo ...
++                                                           ~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=8081:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+Exception in thread "main" java.io.FileNotFoundException: C:\Users\nhath\.gradle\wrapper\dists\gradle-9.3.0-bin\79n14ral3mx1ozqr3csh2u872\gradle-9.3.0-bin.zip.lck (Access is denied)
+	at java.base/java.io.RandomAccessFile.open0(Native Method)
+	at java.base/java.io.RandomAccessFile.open(RandomAccessFile.java:344)
+	at java.base/java.io.RandomAccessFile.<init>(RandomAccessFile.java:259)
+	at java.base/java.io.RandomAccessFile.<init>(RandomAccessFile.java:213)
+	at org.gradle.wrapper.GradleWrapperMain.main(SourceFile:67)

@@ -10,49 +10,50 @@ export default function CardGrid() {
   // Static UI-only example cards
     const games = [
         {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
+            "title":"archery",
+            "thumbnail":"game_archery.png",
+            "genre": ["sport"]
         },
         {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
+            "title":"sudoku",
+            "thumbnail":"game_sudoku.png",
+            "genre": ["puzzle"]
         },
         {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        },{
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
+            "title":"battleship",
+            "thumbnail":"game_battleship.png",
+            "genre":["strategy"]
         },
-        {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
-        },
-        {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        },
-        {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
-        },
-        {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
-        },
-        {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        }
+        // {
+        //     "title":"snake",
+        //     "thumbnail":"game_snake.jfif",
+        //     "genre": ["arcade"]
+        // },
+        // {
+        //     "title":"csgo",
+        //     "thumbnail":"game_csgo.jpg",
+        //     "genre": ["fps", "action"]
+        // },
+        // {
+        //     "title":"tetris",
+        //     "thumbnail":"game_tetris.png",
+        //     "genre":["puzzle"]
+        // },
+        // {
+        //     "title":"snake",
+        //     "thumbnail":"game_snake.jfif",
+        //     "genre": ["arcade"]
+        // },
+        // {
+        //     "title":"csgo",
+        //     "thumbnail":"game_csgo.jpg",
+        //     "genre": ["fps", "action"]
+        // },
+        // {
+        //     "title":"tetris",
+        //     "thumbnail":"game_tetris.png",
+        //     "genre":["puzzle"]
+        // }
     ];
 
   const displayedGames = useMemo(() => {

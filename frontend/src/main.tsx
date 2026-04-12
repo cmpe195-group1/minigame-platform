@@ -10,6 +10,7 @@ import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import SudokuPage from "@/pages/SudokuPage";
 import ArcheryPage from "@/pages/ArcheryPage";
+import BattleshipPage from "@/pages/BattleshipPage";
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -25,6 +26,7 @@ createRoot(document.getElementById('root')!).render(
                     <Route path="/games/search" element={<Search />} />
                     <Route path="/games/sudoku" element={<SudokuPage />} />
                     <Route path="/games/archery" element={<ArcheryPage />} />
+                    <Route path="/games/battleship" element={<BattleshipPage />} />
                 </Routes>
             </main>
         </div>

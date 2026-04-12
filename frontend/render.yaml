@@ -1,16 +1,4 @@
 services:
-  # ── Sudoku ─────────────────────────────
-  - type: web
-    name: react-phaser-sudoku-multiplayer
-    env: node
-    plan: free
-    buildCommand: npm install && npm run build
-    startCommand: node src/games/sudoku/server/server.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-
-  # ── Archery ────────────────────────────────────
   - type: web
     name: archery-multiplayer
     env: node

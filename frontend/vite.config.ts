@@ -15,14 +15,8 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      "/socket.io": {
-        target: "http://localhost:3002",
-        changeOrigin: true,
-        ws: true,
-        secure: false,
-      },
       '/ws': {
-        target: 'ws://localhost:3001',
+        target: 'ws://localhost:8080',
         ws: true,
         changeOrigin: true,
         secure: false

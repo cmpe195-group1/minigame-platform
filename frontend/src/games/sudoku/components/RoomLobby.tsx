@@ -23,7 +23,6 @@ export default function RoomLobby({
   const isFull = roomState.participants.length >= roomState.maxPlayers;
   const canStart = isHost && roomState.participants.length >= 2;
 
-  // Transport badge
   const transportLabel =
     roomState.transport === "broadcast"
       ? { label: "Local (same browser)", icon: "🖥️", color: "text-blue-300 bg-blue-500/20" }
@@ -40,7 +39,6 @@ export default function RoomLobby({
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
       <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl shadow-2xl p-8 w-full max-w-md text-white">
 
-        {/* Header */}
         <div className="text-center mb-6">
           <div className="text-3xl mb-2">🚪</div>
           <h2 className="text-2xl font-extrabold text-white">
@@ -49,13 +47,11 @@ export default function RoomLobby({
           <p className="text-blue-300 text-sm mt-1">
             {isHost ? "Waiting for players to join…" : "Waiting for host to start…"}
           </p>
-          {/* Transport badge */}
           <span className={`inline-flex items-center gap-1 mt-2 text-xs font-semibold px-3 py-1 rounded-full ${transportLabel.color}`}>
             {transportLabel.icon} {transportLabel.label}
           </span>
         </div>
 
-        {/* Room Code */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-6 text-center">
           <p className="text-xs text-blue-300 uppercase tracking-widest font-semibold mb-2">
             Room Code
@@ -79,7 +75,6 @@ export default function RoomLobby({
           </p>
         </div>
 
-        {/* Players list */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-blue-200 uppercase tracking-widest font-semibold">
@@ -117,7 +112,6 @@ export default function RoomLobby({
               </div>
             ))}
 
-            {/* Empty seats */}
             {Array.from(
               { length: roomState.maxPlayers - roomState.participants.length },
               (_, i) => (
@@ -137,7 +131,6 @@ export default function RoomLobby({
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex flex-col gap-3">
           {isHost && (
             <button

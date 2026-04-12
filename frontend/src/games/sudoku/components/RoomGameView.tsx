@@ -34,7 +34,6 @@ export default function RoomGameView({
     sceneRef.current?.clearSelection();
   }, [roomState.currentPlayerIndex, roomState]);
 
-  // Identify MY player using unified clientId
   const myParticipant = roomState.participants.find(
     (p) => p.clientId === myClientId
   );
@@ -45,7 +44,6 @@ export default function RoomGameView({
   const currentPlayer = roomState.players[roomState.currentPlayerIndex] ?? null;
   const isMyTurn = !!myPlayer && myPlayer.id === currentPlayer?.id;
 
-  // ── Cell click ───────────────────────────────────────────────────────────────
   const handleCellClick = useCallback(
     (row: number, col: number) => {
       const current = roomStateRef.current;
@@ -61,7 +59,6 @@ export default function RoomGameView({
     [isMyTurn]
   );
 
-  // ── Number input ─────────────────────────────────────────────────────────────
   const handleNumberInput = useCallback(
     (num: number) => {
       if (!isMyTurn) return;
@@ -78,7 +75,6 @@ export default function RoomGameView({
     [isMyTurn, onMakeMove]
   );
 
-  // ── Keyboard ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const num = parseInt(e.key);
@@ -99,13 +95,11 @@ export default function RoomGameView({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col">
-      {/* Header */}
       <header className="py-3 px-6 flex-shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs bg-white/10 text-blue-300 px-3 py-1 rounded-full font-mono font-bold">
             Room: {roomState.roomCode}
           </span>
-          {/* Transport indicator */}
           <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
             roomState.transport === "broadcast"
               ? "bg-blue-500/20 text-blue-300"
@@ -145,9 +139,7 @@ export default function RoomGameView({
         </div>
       </header>
 
-      {/* Main */}
       <main className="flex-1 flex flex-col xl:flex-row items-center xl:items-start justify-center gap-6 px-4 pb-8">
-        {/* Canvas */}
         <div className="flex-shrink-0">
           {board && board.length > 0 && (
             <div
@@ -177,9 +169,7 @@ export default function RoomGameView({
           </p>
         </div>
 
-        {/* Right panel */}
         <div className="w-full max-w-xs xl:max-w-sm flex flex-col gap-4">
-          {/* Turn indicator */}
           {phase === "playing" && (
             <div
               className={`rounded-2xl p-3 text-center font-bold text-sm transition-all duration-300 ${
@@ -203,7 +193,6 @@ export default function RoomGameView({
             moveCount={moveCount}
           />
 
-          {/* Number pad */}
           {phase === "playing" && (
             <div className="bg-white rounded-2xl shadow border border-slate-100 p-4">
               <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3 text-center">
@@ -240,7 +229,6 @@ export default function RoomGameView({
             </div>
           )}
 
-          {/* Controls */}
           <div className="flex flex-col gap-2">
             {isHost ? (
               <>
@@ -266,7 +254,6 @@ export default function RoomGameView({
             )}
           </div>
 
-          {/* Connected players list */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
             <p className="text-xs text-blue-300 uppercase tracking-widest font-semibold mb-3">
               Connected Players

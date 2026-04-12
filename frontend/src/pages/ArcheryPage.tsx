@@ -1,5 +1,5 @@
 /**
- * App.tsx
+ * ArcheryPage.tsx
  * Root component – orchestrates the three screens:
  *   1. Lobby      – create / join room, waiting room
  *   2. GameCanvas – active multiplayer game

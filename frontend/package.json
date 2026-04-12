@@ -4,14 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"set PORT=3002&& node src/games/sudoku/server/server.js\" \"tsx watch src/games/archery/server/index.ts\" \"vite\"",
+    "dev": "concurrently \"set PORT=3002&& node src/games/battleship/server/server.js\" \"tsx watch src/games/archery/server/index.ts\" \"vite\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "ncu": "npm-check-updates"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.3.0",
     "@tailwindcss/vite": "^4.1.18",
+    "clsx": "^2.1.1",
     "express": "^5.2.1",
     "framer-motion": "^12.36.0",
     "lucide-react": "^0.563.0",
@@ -19,9 +21,8 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router": "^7.13.0",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
     "styled-components": "^6.3.8",
+    "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.1.18",
     "uuid": "^13.0.0"
   },

@@ -231,7 +231,6 @@ export default function SudokuPage() {
         onBack={() => setScreen("main-menu")}
         joinError={room.joinError}
         isConnected={room.isConnected}
-        transport={room.transport}
       />
     );
   }

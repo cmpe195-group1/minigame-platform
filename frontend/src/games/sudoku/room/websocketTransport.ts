@@ -1,9 +1,14 @@
-// ─── WebSocket (Socket.IO) Transport ──────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef } from "react";
-import { io, Socket } from "socket.io-client";
-import type { RoomState, JoinAck } from "./RoomTypes";
+import { Client, type IMessage, type StompSubscription, type IFrame } from "@stomp/stompjs";
+import type { RoomState } from "./RoomTypes";
 
 export type WSRole = "none" | "host" | "guest";
+
+interface ServerMessage {
+  type: "ROOM_STATE" | "JOIN_ERROR";
+  roomState?: RoomState | null;
+  error?: string | null;
+}
 
 export interface UseWebSocketTransportReturn {
   isConnected: boolean;
@@ -11,7 +16,6 @@ export interface UseWebSocketTransportReturn {
   joinError: string | null;
   roomState: RoomState | null;
   role: WSRole;
-
   createRoom: (hostName: string, maxPlayers: number) => void;
   joinRoom: (code: string, name: string) => void;
   leaveRoom: () => void;
@@ -21,175 +25,220 @@ export interface UseWebSocketTransportReturn {
   handleRestart: () => void;
 }
 
-let _socket: Socket | null = null;
-function getSocket(): Socket {
-  if (!_socket) {
-    _socket = io("/", {
-      transports: ["polling", "websocket"],
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
+let _clientToken: string | null = null;
+function getClientToken(): string {
+  if (!_clientToken) {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      _clientToken = crypto.randomUUID();
+    } else {
+      _clientToken = `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+  }
+  return _clientToken;
+}
+
+let _client: Client | null = null;
+function resolveBrokerUrl(): string {
+  const override = import.meta.env.VITE_SUDOKU_WS_URL;
+  if (override) {
+    return override;
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
+
+function getClient(): Client {
+  if (!_client) {
+    _client = new Client({
+      brokerURL: resolveBrokerUrl(),
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
+      debug: () => {},
     });
   }
-  return _socket;
+  return _client;
+}
+
+function parseMessage(message: IMessage): ServerMessage | null {
+  try {
+    return JSON.parse(message.body) as ServerMessage;
+  } catch {
+    return null;
+  }
 }
 
 export function useWebSocketTransport(): UseWebSocketTransportReturn {
-  const socket = getSocket();
+  const client = getClient();
+  const clientToken = getClientToken();
 
   const [role, setRole] = useState<WSRole>("none");
   const [roomState, setRoomState] = useState<RoomState | null>(null);
-  const [myClientId, setMyClientId] = useState<string | null>(
-    socket.id ?? null
-  );
+  const [myClientId, setMyClientId] = useState<string | null>(clientToken);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [isConnected, setIsConnected] = useState(client.connected);
 
   const roomStateRef = useRef<RoomState | null>(null);
+  const clientSubscriptionRef = useRef<StompSubscription | null>(null);
+  const roomSubscriptionRef = useRef<StompSubscription | null>(null);
+  const roomDestinationRef = useRef<string | null>(null);
+
   useEffect(() => {
     roomStateRef.current = roomState;
   }, [roomState]);
 
-  // ── Socket lifecycle ─────────────────────────────────────────────────────
+  const subscribeToRoom = useCallback((roomCode: string) => {
+    if (!client.connected) return;
+
+    const destination = `/topic/sudoku/room/${roomCode}`;
+    if (roomDestinationRef.current === destination) {
+      return;
+    }
+
+    roomSubscriptionRef.current?.unsubscribe();
+    roomDestinationRef.current = destination;
+    roomSubscriptionRef.current = client.subscribe(destination, (message) => {
+      const parsed = parseMessage(message);
+      if (parsed?.type === "ROOM_STATE" && parsed.roomState) {
+        setRoomState(parsed.roomState);
+      }
+    });
+  }, [client]);
+
   useEffect(() => {
-    const onConnect = () => {
+    client.onConnect = () => {
       setIsConnected(true);
-      setMyClientId(socket.id ?? null);
-      console.log("[WS] connected:", socket.id);
+      setMyClientId(clientToken);
+
+      clientSubscriptionRef.current?.unsubscribe();
+      clientSubscriptionRef.current = client.subscribe(
+        `/topic/sudoku/client/${clientToken}`,
+        (message) => {
+          const parsed = parseMessage(message);
+          if (!parsed) return;
+
+          if (parsed.type === "JOIN_ERROR") {
+            setJoinError(parsed.error ?? "Unable to join room.");
+            setRole("none");
+            return;
+          }
+
+          if (parsed.type === "ROOM_STATE" && parsed.roomState) {
+            setJoinError(null);
+            setRoomState(parsed.roomState);
+            subscribeToRoom(parsed.roomState.roomCode);
+          }
+        }
+      );
+
+      const current = roomStateRef.current;
+      if (current?.roomCode) {
+        subscribeToRoom(current.roomCode);
+      }
     };
-    const onDisconnect = (reason: string) => {
+
+    client.onDisconnect = () => {
       setIsConnected(false);
-      console.warn("[WS] disconnected:", reason);
     };
-    const onConnectError = (err: Error) => {
-      console.error("[WS] connect_error:", err.message);
+
+    client.onStompError = (frame) => {
+      console.error("[STOMP] broker error:", frame.headers["message"]);
     };
-    const onRoomState = (state: RoomState) => setRoomState(state);
-    const onJoinError = (msg: { error: string }) => setJoinError(msg.error);
 
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
-    socket.on("connect_error", onConnectError);
-    socket.on("ROOM_STATE", onRoomState);
-    socket.on("JOIN_ERROR", onJoinError);
+    client.onWebSocketError = (event) => {
+      console.error("[STOMP] websocket error:", event);
+    };
 
+    if (!client.active) {
+      client.activate();
+    }
 
     return () => {
-      socket.off("connect", onConnect);
-      socket.off("disconnect", onDisconnect);
-      socket.off("connect_error", onConnectError);
-      socket.off("ROOM_STATE", onRoomState);
-      socket.off("JOIN_ERROR", onJoinError);
+      clientSubscriptionRef.current?.unsubscribe();
+      roomSubscriptionRef.current?.unsubscribe();
+      roomDestinationRef.current = null;
     };
-  }, [socket]);
+  }, [client, clientToken, subscribeToRoom]);
 
-  // ── Create room ──────────────────────────────────────────────────────────
-  const createRoom = useCallback(
-    (hostName: string, maxPlayers: number) => {
-      setJoinError(null);
-      const doCreate = () => {
-        socket.emit("CREATE_ROOM", { hostName, maxPlayers });
-        setRole("host");
-      };
-      if (!socket.connected) {
-        // Fallback: user clicked before autoConnect finished
-        socket.connect();
-        socket.once("connect", doCreate);
-      } else {
-        doCreate();
-      }
-    },
-    [socket]
-  );
+  const publishJson = useCallback((destination: string, body: unknown) => {
+    const publish = () =>
+      client.publish({
+        destination,
+        body: JSON.stringify(body),
+      });
 
-  // ── Join room ────────────────────────────────────────────────────────────
-  const joinRoom = useCallback(
-    (code: string, name: string) => {
-      setJoinError(null);
-      const roomCode = code.trim().toUpperCase();
-      const doJoin = () => {
-        socket.emit(
-          "JOIN_ROOM",
-          { roomCode, playerName: name },
-          (ack: JoinAck) => {
-            if (ack?.error) {
-              setJoinError(ack.error);
-              setRole("none");
-            } else {
-              setRole("guest");
-            }
-          }
-        );
-      };
-      // Lazy connect
-      if (!socket.connected) {
-        socket.connect();
-        socket.once("connect", doJoin);
-      } else {
-        doJoin();
-      }
-    },
-    [socket]
-  );
+    if (client.connected) {
+      publish();
+      return;
+    }
 
-  // ── Leave room ───────────────────────────────────────────────────────────
+    const previousOnConnect = client.onConnect;
+    client.onConnect = (frame: IFrame) => {
+      previousOnConnect?.(frame);
+      publish();
+      client.onConnect = previousOnConnect ?? (() => {});
+    };
+
+    if (!client.active) {
+      client.activate();
+    }
+  }, [client]);
+
+  const createRoom = useCallback((hostName: string, maxPlayers: number) => {
+    setJoinError(null);
+    setRole("host");
+    publishJson("/app/sudoku/create", { hostName, maxPlayers, clientToken });
+  }, [clientToken, publishJson]);
+
+  const joinRoom = useCallback((code: string, name: string) => {
+    setJoinError(null);
+    setRole("guest");
+    publishJson("/app/sudoku/join", {
+      roomCode: code.trim().toUpperCase(),
+      playerName: name,
+      clientToken,
+    });
+  }, [clientToken, publishJson]);
+
   const leaveRoom = useCallback(() => {
     setRoomState(null);
     setRole("none");
     setJoinError(null);
-    // Disconnect to notify server (triggers disconnect + participant removal).
-    // Re-connect after a short delay so the socket is ready for a new session.
-    socket.disconnect();
-    setTimeout(() => {
-      socket.connect();
-    }, 500);
-  }, [socket]);
+    roomSubscriptionRef.current?.unsubscribe();
+    roomSubscriptionRef.current = null;
+    roomDestinationRef.current = null;
+    client.deactivate();
+    _client = null;
+  }, [client]);
 
-  // ── Start game ───────────────────────────────────────────────────────────
   const startGame = useCallback(() => {
-    const rs = roomStateRef.current;
-    if (!rs) return;
-    socket.emit("START_GAME", { roomCode: rs.roomCode });
-  }, [socket]);
+    const current = roomStateRef.current;
+    if (!current) return;
+    publishJson("/app/sudoku/start", { roomCode: current.roomCode });
+  }, [publishJson]);
 
-  // ── Make move ────────────────────────────────────────────────────────────
-  const makeMove = useCallback(
-    (row: number, col: number, num: number) => {
-      const rs = roomStateRef.current;
-      if (!rs) return;
-      const me = rs.participants.find((p) => p.clientId === socket.id);
-      if (!me) return;
-      socket.emit("MAKE_MOVE", {
-        roomCode: rs.roomCode,
-        row,
-        col,
-        num,
-        playerId: me.playerId,
-      });
-    },
-    [socket]
-  );
+  const makeMove = useCallback((row: number, col: number, num: number) => {
+    const current = roomStateRef.current;
+    if (!current) return;
+    publishJson("/app/sudoku/makeMove", { roomCode: current.roomCode, row, col, num });
+  }, [publishJson]);
 
-  // ── New puzzle ───────────────────────────────────────────────────────────
   const handleNewPuzzle = useCallback(() => {
-    const rs = roomStateRef.current;
-    if (!rs) return;
-    socket.emit("NEW_PUZZLE", { roomCode: rs.roomCode });
-  }, [socket]);
+    const current = roomStateRef.current;
+    if (!current) return;
+    publishJson("/app/sudoku/newPuzzle", { roomCode: current.roomCode });
+  }, [publishJson]);
 
-  // ── Restart ──────────────────────────────────────────────────────────────
   const handleRestart = useCallback(() => {
-    const rs = roomStateRef.current;
-    if (!rs) return;
-    socket.emit("RESTART", { roomCode: rs.roomCode });
-  }, [socket]);
+    const current = roomStateRef.current;
+    if (!current) return;
+    publishJson("/app/sudoku/restart", { roomCode: current.roomCode });
+  }, [publishJson]);
 
   return {
     isConnected,
-    myClientId: myClientId ?? socket.id ?? null,
+    myClientId,
     joinError,
     roomState,
     role,

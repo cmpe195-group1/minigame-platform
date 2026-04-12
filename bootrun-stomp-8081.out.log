@@ -1,0 +1,40 @@
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>if "Windows_NT" == "Windows_NT" setlocal
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set DIRNAME=C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\ 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>if "C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\" == "" set DIRNAME=. 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set APP_BASE_NAME=gradlew 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set APP_HOME=C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\ 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>for %i in ("C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\") do set APP_HOME=%~fi 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set APP_HOME=C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\ 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m" 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>if defined JAVA_HOME goto findJavaFromJavaHome 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set JAVA_HOME=C:\Users\nhath\AppData\Local\Programs\Eclipse Adoptium\jdk-17.0.10.7-hotspot\ 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set JAVA_EXE=C:\Users\nhath\AppData\Local\Programs\Eclipse Adoptium\jdk-17.0.10.7-hotspot\/bin/java.exe 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>if exist "C:\Users\nhath\AppData\Local\Programs\Eclipse Adoptium\jdk-17.0.10.7-hotspot\/bin/java.exe" goto execute 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>"C:\Users\nhath\AppData\Local\Programs\Eclipse Adoptium\jdk-17.0.10.7-hotspot\/bin/java.exe" "-Xmx64m" "-Xms64m"   "-Dorg.gradle.appname=gradlew" -jar "C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34\\gradle\wrapper\gradle-wrapper.jar" --no-daemon bootRun 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>if 1 EQU 0 goto mainEnd 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>rem Set variable GRADLE_EXIT_CONSOLE if you need the _script_ return code instead of 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>rem the _cmd.exe /c_ return code! 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>set EXIT_CODE=1 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>if 1 EQU 0 set EXIT_CODE=1 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>if not "" == "" exit 1 
+
+C:\Users\nhath\OneDrive\Desktop\CMPE195\CMPE195B_main_project\group-project-team-34>exit /b 1 

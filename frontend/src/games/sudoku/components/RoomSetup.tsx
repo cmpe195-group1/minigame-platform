@@ -154,7 +154,7 @@ export default function RoomSetup({
 
             <button
               onClick={handleCreate}
-              disabled={!isLocal && !isConnected}
+              disabled={!isConnected}
               className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-500
                 hover:from-purple-500 hover:to-purple-400 rounded-2xl text-white text-lg font-bold
                 shadow-xl shadow-purple-500/30 transition-all duration-200 hover:scale-[1.02]
@@ -232,7 +232,7 @@ export default function RoomSetup({
 
             <button
               onClick={handleJoin}
-              disabled={joinCode.length < 4 || (!isLocal && !isConnected)}
+              disabled={joinCode.length < 4 || !isConnected}
               className="w-full py-4 bg-gradient-to-r from-green-600 to-emerald-500
                 hover:from-green-500 hover:to-emerald-400 rounded-2xl text-white text-lg font-bold
                 shadow-xl shadow-green-500/30 transition-all duration-200 hover:scale-[1.02]
