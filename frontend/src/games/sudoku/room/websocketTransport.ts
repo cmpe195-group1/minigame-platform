@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Client, type IMessage, type StompSubscription, type IFrame } from "@stomp/stompjs";
+import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs";
 import type { RoomState } from "./RoomTypes";
 
 export type WSRole = "none" | "host" | "guest";
@@ -25,40 +25,11 @@ export interface UseWebSocketTransportReturn {
   handleRestart: () => void;
 }
 
-let _clientToken: string | null = null;
 function getClientToken(): string {
-  if (!_clientToken) {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-      _clientToken = crypto.randomUUID();
-    } else {
-      _clientToken = `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    }
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
   }
-  return _clientToken;
-}
-
-let _client: Client | null = null;
-function resolveBrokerUrl(): string {
-  const override = import.meta.env.VITE_SUDOKU_WS_URL;
-  if (override) {
-    return override;
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/ws`;
-}
-
-function getClient(): Client {
-  if (!_client) {
-    _client = new Client({
-      brokerURL: resolveBrokerUrl(),
-      reconnectDelay: 5000,
-      heartbeatIncoming: 4000,
-      heartbeatOutgoing: 4000,
-      debug: () => {},
-    });
-  }
-  return _client;
+  return `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function parseMessage(message: IMessage): ServerMessage | null {
@@ -70,25 +41,37 @@ function parseMessage(message: IMessage): ServerMessage | null {
 }
 
 export function useWebSocketTransport(): UseWebSocketTransportReturn {
-  const client = getClient();
-  const clientToken = getClientToken();
+  const clientTokenRef = useRef<string>(getClientToken());
+  const clientRef = useRef<Client | null>(null);
+  const clientToken = clientTokenRef.current;
 
   const [role, setRole] = useState<WSRole>("none");
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [myClientId, setMyClientId] = useState<string | null>(clientToken);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(client.connected);
+  const [isConnected, setIsConnected] = useState(false);
 
   const roomStateRef = useRef<RoomState | null>(null);
   const clientSubscriptionRef = useRef<StompSubscription | null>(null);
   const roomSubscriptionRef = useRef<StompSubscription | null>(null);
   const roomDestinationRef = useRef<string | null>(null);
 
+  const resolveBrokerUrl = useCallback(() => {
+    const override = import.meta.env.VITE_SUDOKU_WS_URL;
+    if (override) {
+      return override;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws`;
+  }, []);
+
   useEffect(() => {
     roomStateRef.current = roomState;
   }, [roomState]);
 
   const subscribeToRoom = useCallback((roomCode: string) => {
+    const client = clientRef.current;
     if (!client.connected) return;
 
     const destination = `/topic/sudoku/room/${roomCode}`;
@@ -104,9 +87,18 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
         setRoomState(parsed.roomState);
       }
     });
-  }, [client]);
+  }, []);
 
   useEffect(() => {
+    const client = new Client({
+      brokerURL: resolveBrokerUrl(),
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
+      debug: () => {},
+    });
+    clientRef.current = client;
+
     client.onConnect = () => {
       setIsConnected(true);
       setMyClientId(clientToken);
@@ -140,28 +132,42 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
 
     client.onDisconnect = () => {
       setIsConnected(false);
+      if (!roomStateRef.current) {
+        setJoinError("Lost connection to the Sudoku server. Check that the Spring backend is still running.");
+      }
     };
 
     client.onStompError = (frame) => {
       console.error("[STOMP] broker error:", frame.headers["message"]);
+      setJoinError(frame.headers["message"] ?? "Sudoku server rejected the connection.");
     };
 
     client.onWebSocketError = (event) => {
       console.error("[STOMP] websocket error:", event);
+      setJoinError("Unable to connect to the Sudoku server at " + resolveBrokerUrl());
     };
 
-    if (!client.active) {
-      client.activate();
-    }
+    client.activate();
 
     return () => {
       clientSubscriptionRef.current?.unsubscribe();
       roomSubscriptionRef.current?.unsubscribe();
+      clientSubscriptionRef.current = null;
+      roomSubscriptionRef.current = null;
       roomDestinationRef.current = null;
+      setIsConnected(false);
+      void client.deactivate();
+      clientRef.current = null;
     };
-  }, [client, clientToken, subscribeToRoom]);
+  }, [clientToken, resolveBrokerUrl, subscribeToRoom]);
 
   const publishJson = useCallback((destination: string, body: unknown) => {
+    const client = clientRef.current;
+    if (!client) {
+      setJoinError("Sudoku connection has not been initialized yet.");
+      return;
+    }
+
     const publish = () =>
       client.publish({
         destination,
@@ -172,18 +178,8 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
       publish();
       return;
     }
-
-    const previousOnConnect = client.onConnect;
-    client.onConnect = (frame: IFrame) => {
-      previousOnConnect?.(frame);
-      publish();
-      client.onConnect = previousOnConnect ?? (() => {});
-    };
-
-    if (!client.active) {
-      client.activate();
-    }
-  }, [client]);
+    setJoinError("Still connecting to the Sudoku server. Try again in a moment.");
+  }, []);
 
   const createRoom = useCallback((hostName: string, maxPlayers: number) => {
     setJoinError(null);
@@ -202,15 +198,18 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
   }, [clientToken, publishJson]);
 
   const leaveRoom = useCallback(() => {
+    const current = roomStateRef.current;
+    if (current?.roomCode) {
+      publishJson("/app/sudoku/leave", { roomCode: current.roomCode });
+    }
+
     setRoomState(null);
     setRole("none");
     setJoinError(null);
     roomSubscriptionRef.current?.unsubscribe();
     roomSubscriptionRef.current = null;
     roomDestinationRef.current = null;
-    client.deactivate();
-    _client = null;
-  }, [client]);
+  }, [publishJson]);
 
   const startGame = useCallback(() => {
     const current = roomStateRef.current;

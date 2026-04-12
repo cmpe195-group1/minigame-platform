@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"set PORT=3002&& node src/games/battleship/server/server.js\" \"tsx watch src/games/archery/server/index.ts\" \"vite\"",
+    "dev": "vite",
+    "dev:full": "concurrently \"set PORT=3002&& node src/games/battleship/server/server.js\" \"tsx watch src/games/archery/server/index.ts\" \"vite\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

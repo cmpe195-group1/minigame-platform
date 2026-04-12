@@ -42,6 +42,13 @@ public class StompSessionRegistry {
         }
     }
 
+    public void clearRoomCode(String sessionId) {
+        SessionInfo info = sessions.get(sessionId);
+        if (info != null) {
+            info.setRoomCode(null);
+        }
+    }
+
     public String getClientToken(String sessionId) {
         SessionInfo info = sessions.get(sessionId);
         return info != null ? info.getClientToken() : null;

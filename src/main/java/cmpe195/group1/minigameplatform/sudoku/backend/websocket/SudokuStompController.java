@@ -120,6 +120,22 @@ public class SudokuStompController {
         }
     }
 
+    @MessageMapping("/sudoku/leave")
+    public void leaveRoom(RoomCodePayload payload, SimpMessageHeaderAccessor headers) {
+        String sessionId = headers.getSessionId();
+        String clientToken = sessionRegistry.getClientToken(sessionId);
+        if (sessionId == null || clientToken == null) {
+            return;
+        }
+
+        String roomCode = payload != null ? payload.getRoomCode() : null;
+        RoomState room = roomService.disconnect(clientToken, roomCode);
+        sessionRegistry.clearRoomCode(sessionId);
+        if (room != null) {
+            broadcastRoom(room);
+        }
+    }
+
     @EventListener
     public void onDisconnect(SessionDisconnectEvent event) {
         StompSessionRegistry.SessionInfo info = sessionRegistry.remove(event.getSessionId());
