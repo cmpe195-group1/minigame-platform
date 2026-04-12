@@ -60,7 +60,6 @@ export function chessReducer(
 }
 
 function updateMovedPieces(state: ChessState, piece: ChessState["board"][number][number], fromX: number, fromY: number, toX: number, toY: number) {
-  // Track moved squares for special moves like castling or en passant
   if (!piece) return null;
 
   if (piece.type === "king" || piece.type === "rook") {
@@ -101,7 +100,10 @@ function validatePieceMove(state: ChessState, piece: ChessState["board"][number]
         state["board"][state.selectedSquare!.y][state.selectedSquare!.x] = { type: "queen", color: piece.color, hasMoved: true }; // Auto-promote to queen for simplicity
         return true;
       }
-      if (enPassantCheck(state, piece, dx, dy)) return true;
+      if (enPassantCheck(state, piece, dx, dy)) {
+        state["board"][state.selectedSquare!.y][state.selectedSquare!.x + dx] = null; // Remove the captured pawn
+        return true;
+      }
       // Normal move
       if (dx === 0 && dy === dir) return true;  
       // Initial double move

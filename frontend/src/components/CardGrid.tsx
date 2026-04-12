@@ -12,6 +12,11 @@ export default function CardGrid() {
             "title":"checkers",
             "thumbnail":"checkers_thumbnail.jfif",
             "genre": ["strategy", "board"]
+        },
+        {
+          "title":"knockout",
+          "thumbnail":"knockout_thumbnail.png",
+          "genre": ["arcade", "action"]
         }
     ];
 
