@@ -42,7 +42,7 @@ export class KnockoutScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#f5efe2");
     this.drawBoard();
     this.createPuckTextures();
-    this.physics.world.overlapBias = Math.max(this.physics.world.overlapBias, PUCK_RADIUS);
+    this.physics.world.OVERLAP_BIAS = Math.max(this.physics.world.OVERLAP_BIAS, PUCK_RADIUS);
 
     this.pucks = this.physics.add.group();
     this.physics.add.collider(
@@ -80,7 +80,7 @@ export class KnockoutScene extends Phaser.Scene {
       puck.setDepth(5);
       body.setAllowGravity(false);
       body.setMass(1);
-      body.setPushable(true);
+      body.pushable = true;
 
       puck.setTexture(textureKey);
 
@@ -336,22 +336,22 @@ export class KnockoutScene extends Phaser.Scene {
   }
 
   private shouldProcessPuckCollision(
-    firstObj: Phaser.GameObjects.GameObject,
-    secondObj: Phaser.GameObjects.GameObject
+    firstObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject,
+    secondObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject
   ) {
-    const first = firstObj as Phaser.Physics.Arcade.Image;
-    const second = secondObj as Phaser.Physics.Arcade.Image;
+    const first = (firstObj as any).gameObject as Phaser.Physics.Arcade.Image;
+    const second = (secondObj as any).gameObject as Phaser.Physics.Arcade.Image;
 
-    if (!first.body || !second.body) return false;
+    if (!first || !first.body || !second || !second.body) return false;
     return first.active && second.active;
   }
 
   private handlePuckCollision(
-    firstObj: Phaser.GameObjects.GameObject,
-    secondObj: Phaser.GameObjects.GameObject
+    firstObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject,
+    secondObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject
   ) {
-    const first = firstObj as Phaser.Physics.Arcade.Image;
-    const second = secondObj as Phaser.Physics.Arcade.Image;
+    const first = (firstObj as Phaser.Physics.Arcade.Body).gameObject as Phaser.Physics.Arcade.Image;
+    const second = (secondObj as Phaser.Physics.Arcade.Body).gameObject as Phaser.Physics.Arcade.Image;
     const firstBody = first.body as Phaser.Physics.Arcade.Body | undefined;
     const secondBody = second.body as Phaser.Physics.Arcade.Body | undefined;
     if (!firstBody || !secondBody) return;
