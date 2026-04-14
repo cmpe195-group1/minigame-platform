@@ -11,6 +11,8 @@ import RegisterPage from '@/pages/RegisterPage'
 import SudokuPage from "@/pages/SudokuPage";
 import ArcheryPage from "@/pages/ArcheryPage";
 import BattleshipPage from "@/pages/BattleshipPage";
+import CheckersGameWrapper from "./games/checkers/CheckersGameWrapper"
+import CheckersPage from "./pages/CheckersPage"
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -27,6 +29,7 @@ createRoot(document.getElementById('root')!).render(
                     <Route path="/games/sudoku" element={<SudokuPage />} />
                     <Route path="/games/archery" element={<ArcheryPage />} />
                     <Route path="/games/battleship" element={<BattleshipPage />} />
+                    <Route path="/games/checkers" element={<CheckersPage />} />
                 </Routes>
             </main>
         </div>

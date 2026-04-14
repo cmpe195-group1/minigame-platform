@@ -6,9 +6,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Import;
 
-@SpringBootApplication(exclude = {
-        DataSourceAutoConfiguration.class
-})
+@SpringBootApplication(
+    exclude = { DataSourceAutoConfiguration.class },
+    scanBasePackages = {
+        "cmpe195.group1.minigameplatform.sudoku.backend",
+        "cmpe195.group1.minigameplatform.checkers.backend"
+    }
+)
 @Import(SecurityConfiguration.class)
 public class SudokuBackendApplication {
 

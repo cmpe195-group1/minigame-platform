@@ -24,6 +24,11 @@ export default function CardGrid() {
             "thumbnail":"game_battleship.png",
             "genre":["strategy"]
         },
+        {
+          "title":"checkers",
+          "thumbnail":"game_checkers.jfif",
+          "genre": ["strategy"]
+        }
         // {
         //     "title":"snake",
         //     "thumbnail":"game_snake.jfif",
