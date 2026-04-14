@@ -1,4 +1,4 @@
-package cmpe195.group1.minigameplatform.sudoku.backend;
+/*package cmpe195.group1.minigameplatform.sudoku.backend;
 
 import cmpe195.group1.minigameplatform.SecurityConfiguration;
 import org.springframework.boot.SpringApplication;
@@ -19,4 +19,4 @@ public class SudokuBackendApplication {
     public static void main(String[] args) {
         SpringApplication.run(SudokuBackendApplication.class, args);
     }
-}
+}*/
