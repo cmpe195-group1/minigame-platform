@@ -72,7 +72,7 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
 
   const subscribeToRoom = useCallback((roomCode: string) => {
     const client = clientRef.current;
-    if (!client.connected) return;
+    if (!client!.connected) return;
 
     const destination = `/topic/sudoku/room/${roomCode}`;
     if (roomDestinationRef.current === destination) {
@@ -81,7 +81,7 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
 
     roomSubscriptionRef.current?.unsubscribe();
     roomDestinationRef.current = destination;
-    roomSubscriptionRef.current = client.subscribe(destination, (message) => {
+    roomSubscriptionRef.current = client!.subscribe(destination, (message) => {
       const parsed = parseMessage(message);
       if (parsed?.type === "ROOM_STATE" && parsed.roomState) {
         setRoomState(parsed.roomState);
