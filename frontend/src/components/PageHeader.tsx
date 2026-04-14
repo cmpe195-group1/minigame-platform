@@ -5,6 +5,7 @@ import NavBar from "./NavBar"
 import { motion, AnimatePresence } from "framer-motion"
 import { useSearchParams } from "react-router"
 import styled from "styled-components"
+import type { AuthSnapshot } from "@/auth"
 
 const Container = styled.div`
   position: fixed;
@@ -27,7 +28,7 @@ const Container = styled.div`
   margin-right: auto;
 `;
 
-const SignInButton = styled.button`
+const ActionLink = styled(Link)`
   background: #1e40af;
   padding: 10px 20px;
   border-radius: 8px;
@@ -35,6 +36,8 @@ const SignInButton = styled.button`
   font-size: 14px;
   font-weight: bold;
   transition: background 0.3s;
+  color: white;
+  text-decoration: none;
 
   &:hover {
     background: #2563eb;
@@ -42,7 +45,16 @@ const SignInButton = styled.button`
   }
 `;
 
-const RegisterButton = styled.button`
+const RegisterLink = styled(ActionLink)`
+  background: #dc2626;
+
+  &:hover {
+    background: #ef4444;
+    transform: translateY(-1px);
+  }
+`;
+
+const LogoutButton = styled.button`
   background: #dc2626;
   padding: 10px 20px;
   border-radius: 8px;
@@ -55,11 +67,24 @@ const RegisterButton = styled.button`
     background: #ef4444;
     transform: translateY(-1px);
   }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+    transform: none;
+  }
 `;
 
+type HeaderProps = {
+  auth: AuthSnapshot
+  onLogout: () => Promise<void>
+}
 
-export default function Header() {
+
+export default function Header({ auth, onLogout }: HeaderProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
 
   const [searchParams, setSearchParams] = useSearchParams();
   const currentSearch = searchParams.get("search") || "";
@@ -81,6 +106,21 @@ export default function Header() {
   useEffect(() => {
     setSearchInput(currentSearch);
   }, [currentSearch]);
+
+  const handleLogout = async () => {
+    setLogoutError('');
+    setIsLoggingOut(true);
+
+    try {
+      await onLogout();
+    } catch {
+      setLogoutError('Unable to log out right now. Please try again.');
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const userLabel = auth.user?.email || auth.user?.displayName || 'Signed in';
   
   return (
     <>
@@ -126,14 +166,30 @@ export default function Header() {
           </div>
 
           <div className="flex items-center gap-3">
-            <SignInButton>
-              <Link to="/login">Sign In</Link>
-            </SignInButton>
-            <RegisterButton>
-              <Link to="/register">Register</Link>
-            </RegisterButton>
+            {auth.user ? (
+              <>
+                <span className="hidden text-sm text-blue-100 md:block">
+                  {userLabel}
+                </span>
+                <LogoutButton onClick={handleLogout} disabled={isLoggingOut} type="button">
+                  {isLoggingOut ? 'Logging Out...' : 'Logout'}
+                </LogoutButton>
+              </>
+            ) : auth.initializing ? (
+              <span className="text-sm text-blue-100">Checking session...</span>
+            ) : (
+              <>
+                <ActionLink to="/login">Sign In</ActionLink>
+                <RegisterLink to="/register">Register</RegisterLink>
+              </>
+            )}
           </div>
         </Container>
+        {logoutError ? (
+          <div className="bg-red-500/15 px-6 py-2 text-center text-sm text-red-100">
+            {logoutError}
+          </div>
+        ) : null}
       </header>
       <AnimatePresence>
           {isSidebarOpen && (
