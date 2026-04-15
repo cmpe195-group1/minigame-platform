@@ -40,7 +40,11 @@ public class SecurityConfiguration {
         ));
         config.setAllowedMethods(List.of("*"));
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedOriginPatterns(List.of(
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+        "https://multiplayer-testing-frontend-production.up.railway.app"
+        ));
         config.setAllowCredentials(true); // If credentials like cookies or Authorization headers are used
 
         var source = new UrlBasedCorsConfigurationSource();
