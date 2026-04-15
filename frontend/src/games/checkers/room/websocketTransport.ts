@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs";
 import type { RoomState } from "./RoomTypes";
 import type { CheckersState, Position } from "../types";
+import { BACKEND_URL } from "../../../backend";
 
 export type WSRole = "none" | "host" | "guest";
 
@@ -40,8 +41,6 @@ function parseMessage(message: IMessage): ServerMessage | null {
   }
 }
 
-const BACKEND_URL: string = import.meta.env.VITE_BACKEND_URL;
-
 export function useWebSocketTransport(): UseWebSocketTransportReturn {
   const [clientToken] = useState(getClientToken);
   const clientRef = useRef<Client | null>(null);
@@ -68,7 +67,7 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/ws`;
     */
-
+    console.log(`${BACKEND_URL.replace(/^http/, "ws")}/ws`);
     return `${BACKEND_URL.replace(/^http/, "ws")}/ws`;
   }, []);
 
