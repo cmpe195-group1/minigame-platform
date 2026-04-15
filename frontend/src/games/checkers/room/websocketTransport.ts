@@ -66,9 +66,13 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/ws`;
-    */
+    
     console.log(`${BACKEND_URL.replace(/^http/, "ws")}/ws`);
     return `${BACKEND_URL.replace(/^http/, "ws")}/ws`;
+    */
+    const base = BACKEND_URL.replace(/\/+$/, "");
+    console.log(`${base.replace(/^http/, "ws")}/ws`);
+    return `${base.replace(/^http/, "ws")}/ws`;
   }, []);
 
   useEffect(() => {

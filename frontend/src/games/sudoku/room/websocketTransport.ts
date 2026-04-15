@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs";
 import type { RoomState } from "./RoomTypes";
+import { BACKEND_URL } from "../../../backend";
 
 export type WSRole = "none" | "host" | "guest";
 
@@ -57,6 +58,7 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
   const roomDestinationRef = useRef<string | null>(null);
 
   const resolveBrokerUrl = useCallback(() => {
+    /*
     const override = import.meta.env.VITE_SUDOKU_WS_URL;
     if (override) {
       return override;
@@ -64,6 +66,15 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/ws`;
+    
+   
+       console.log(`${BACKEND_URL.replace(/^http/, "ws")}/ws`);
+       return `${BACKEND_URL.replace(/^http/, "ws")}/ws`;
+    */
+       
+    const base = BACKEND_URL.replace(/\/+$/, "");
+    console.log(`${base.replace(/^http/, "ws")}/ws`);
+    return `${base.replace(/^http/, "ws")}/ws`;
   }, []);
 
   useEffect(() => {
