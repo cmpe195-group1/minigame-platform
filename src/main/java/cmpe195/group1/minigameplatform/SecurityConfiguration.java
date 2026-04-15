@@ -40,6 +40,7 @@ public class SecurityConfiguration {
         ));
         config.setAllowedMethods(List.of("*"));
         config.setAllowedHeaders(List.of("*"));
+        config.setAllowedOriginPatterns(List.of("*"));
         config.setAllowCredentials(true); // If credentials like cookies or Authorization headers are used
 
         var source = new UrlBasedCorsConfigurationSource();
