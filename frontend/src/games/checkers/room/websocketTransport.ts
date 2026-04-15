@@ -40,6 +40,8 @@ function parseMessage(message: IMessage): ServerMessage | null {
   }
 }
 
+const BACKEND_URL: string = import.meta.env.VITE_BACKEND_URL;
+
 export function useWebSocketTransport(): UseWebSocketTransportReturn {
   const [clientToken] = useState(getClientToken);
   const clientRef = useRef<Client | null>(null);
@@ -56,13 +58,18 @@ export function useWebSocketTransport(): UseWebSocketTransportReturn {
   const roomDestinationRef = useRef<string | null>(null);
 
   const resolveBrokerUrl = useCallback(() => {
+    /*
     const override = import.meta.env.VITE_CHECKERS_WS_URL;
     if (override) {
       return override;
     }
+      
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/ws`;
+    */
+
+    return `${BACKEND_URL.replace(/^http/, "ws")}/ws`;
   }, []);
 
   useEffect(() => {
