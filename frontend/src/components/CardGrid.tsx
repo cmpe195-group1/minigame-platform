@@ -31,17 +31,17 @@ export default function CardGrid() {
         },
         {
             "title":"anagrams",
-            "thumbnail":"file.svg",
+            "thumbnail":"anagrams.webp",
             "genre": ["word", "puzzle", "local"]
         },
         {
             "title":"trivia",
-            "thumbnail":"globe.svg",
+            "thumbnail":"trivia.png",
             "genre": ["trivia", "quiz", "local"]
         },
         {
             "title":"uno",
-            "thumbnail":"file.svg",
+            "thumbnail":"uno.webp",
             "genre": ["local"]
         }
     ];
