@@ -33,18 +33,17 @@ jobs:
           distribution: 'zulu'
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
-      - name: Gradle build & test
-        run: ./gradlew build --no-daemon --scan
+      - name: Gradle build, test, generate coverage report
+        run: ./gradlew build jacocoTestReport --no-daemon --scan
       - name: Upload boot jar
         uses: actions/upload-artifact@v7
         with:
           name: minigame-platform.jar
           path: build/libs/minigame-platform.jar
-      - name: Upload reports on failure
-        if: ${{ failure() }}
+      - name: Upload coverage or failure reports
         uses: actions/upload-artifact@v7
         with:
-          name: failure
+          name: reports
           path: build/reports/
   frontend:
     name: Build Frontend
