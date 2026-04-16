@@ -10,37 +10,37 @@ export default function CardGrid() {
   // Static UI-only example cards
     const games = [
         {
-            "title":"archery",
+            "title":"Archery",
             "thumbnail":"game_archery.png",
             "genre": ["sport"]
         },
         {
-            "title":"sudoku",
+            "title":"Sudoku",
             "thumbnail":"game_sudoku.png",
             "genre": ["puzzle"]
         },
         {
-            "title":"battleship",
+            "title":"Battleship",
             "thumbnail":"game_battleship.png",
             "genre":["strategy"]
         },
         {
-          "title":"checkers",
+          "title":"Checkers",
           "thumbnail":"game_checkers.jfif",
           "genre": ["strategy"]
         },
         {
-            "title":"anagrams",
+            "title":"Anagrams",
             "thumbnail":"anagrams.webp",
             "genre": ["word", "puzzle", "local"]
         },
         {
-            "title":"trivia",
+            "title":"Trivia",
             "thumbnail":"trivia.png",
             "genre": ["trivia", "quiz", "local"]
         },
         {
-            "title":"uno",
+            "title":"Uno",
             "thumbnail":"uno.webp",
             "genre": ["local"]
         }
