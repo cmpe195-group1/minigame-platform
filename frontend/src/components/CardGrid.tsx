@@ -28,37 +28,22 @@ export default function CardGrid() {
           "title":"checkers",
           "thumbnail":"game_checkers.jfif",
           "genre": ["strategy"]
+        },
+        {
+            "title":"anagrams",
+            "thumbnail":"file.svg",
+            "genre": ["word", "puzzle", "local"]
+        },
+        {
+            "title":"trivia",
+            "thumbnail":"globe.svg",
+            "genre": ["trivia", "quiz", "local"]
+        },
+        {
+            "title":"uno",
+            "thumbnail":"file.svg",
+            "genre": ["local"]
         }
-        // {
-        //     "title":"snake",
-        //     "thumbnail":"game_snake.jfif",
-        //     "genre": ["arcade"]
-        // },
-        // {
-        //     "title":"csgo",
-        //     "thumbnail":"game_csgo.jpg",
-        //     "genre": ["fps", "action"]
-        // },
-        // {
-        //     "title":"tetris",
-        //     "thumbnail":"game_tetris.png",
-        //     "genre":["puzzle"]
-        // },
-        // {
-        //     "title":"snake",
-        //     "thumbnail":"game_snake.jfif",
-        //     "genre": ["arcade"]
-        // },
-        // {
-        //     "title":"csgo",
-        //     "thumbnail":"game_csgo.jpg",
-        //     "genre": ["fps", "action"]
-        // },
-        // {
-        //     "title":"tetris",
-        //     "thumbnail":"game_tetris.png",
-        //     "genre":["puzzle"]
-        // }
     ];
 
   const displayedGames = useMemo(() => {
