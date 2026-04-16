@@ -1,0 +1,69 @@
+name: CI
+
+on: [push]
+
+jobs:
+  backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: minigame
+          POSTGRES_USER: minigame
+          POSTGRES_PASSWORD: minigame
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_URL: jdbc:postgresql://localhost:5432/minigame
+      DB_USERNAME: minigame
+      DB_PASSWORD: minigame
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'zulu'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Gradle build & test
+        run: ./gradlew build --no-daemon --scan
+      - name: Upload boot jar
+        uses: actions/upload-artifact@v7
+        with:
+          name: minigame-platform.jar
+          path: build/libs/minigame-platform.jar
+      - name: Upload reports on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure
+          path: build/reports/
+  frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: frontend
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '25'
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./frontend
+      - run: npm run build
+        working-directory: ./frontend
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-build
+          path: frontend/dist/
