@@ -1,5 +1,7 @@
 import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs";
 import type { BoardData } from "./Board";
+import { BACKEND_URL } from "@/backend";
+import { useCallback } from "react";
 
 export type PlayerRole = "player1" | "player2" | "player3" | "player4";
 
@@ -33,17 +35,15 @@ export type MultiplayerMessage =
 export type MessageHandler = (msg: MultiplayerMessage) => void;
 
 function getBrokerUrl(): string {
-  const override =
-    (import.meta.env.VITE_BATTLESHIP_WS_URL as string | undefined)?.trim() ||
-    (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
-
-  if (override) {
-    return override;
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/ws`;
+  const base = BACKEND_URL.replace(/\/+$/, "");
+  console.log(`${base.replace(/^http/, "ws")}/ws`);
+  return `${base.replace(/^http/, "ws")}/ws`;
 }
+// const getBrokerUrl = useCallback(() => {
+//     const base = BACKEND_URL.replace(/\/+$/, "");
+//     console.log(`${base.replace(/^http/, "ws")}/ws`);
+//     return `${base.replace(/^http/, "ws")}/ws`;
+// }, []);
 
 function getClientToken(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
