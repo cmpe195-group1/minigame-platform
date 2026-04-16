@@ -322,12 +322,12 @@ export default function Uno() {
     {
       id: "host" as const,
       title: "Host a Game",
-      description: "Reserve this space for future network play and room hosting.",
+      description: "Prepare a cross-device lobby with room codes.",
     },
     {
       id: "join" as const,
       title: "Join a Game",
-      description: "Reserve the same flow as Trivia for future remote matches.",
+      description: "Paste a room code and join remotely.",
     },
   ]
 
@@ -1025,7 +1025,7 @@ export default function Uno() {
                 disabled
                 className="w-full rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 opacity-60"
               >
-                Generate host code
+                Generate room code
               </button>
 
               <textarea
@@ -1083,7 +1083,7 @@ export default function Uno() {
                 disabled
                 className="w-full rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 opacity-60"
               >
-                Enter host code
+                Enter room code
               </button>
 
               <button

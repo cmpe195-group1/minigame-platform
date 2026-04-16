@@ -1129,14 +1129,14 @@ export default function Trivia() {
   }
 
   const promptForHostCode = () => {
-    const input = window.prompt("Paste the host code to join this trivia game:", joinHostCode)
+    const input = window.prompt("Paste the room code to join this trivia game:", joinHostCode)
 
     if (input === null) {
       return
     }
 
     setJoinHostCode(input.trim())
-    setJoinStatus(input.trim() ? "Host code added. Generate your response code next." : "")
+    setJoinStatus(input.trim() ? "Room code added. Generate your response code next." : "")
     setSetupError("")
   }
 
@@ -1149,7 +1149,7 @@ export default function Trivia() {
     }
 
     if (!joinHostCode.trim()) {
-      setSetupError("Use the host code prompt first so this device knows which lobby to join.")
+      setSetupError("Use the room code prompt first so this device knows which lobby to join.")
       return
     }
 
@@ -1205,7 +1205,7 @@ export default function Trivia() {
       setJoinResponseCode(encodeSignalPayload(peer.localDescription ?? answer))
       setJoinStatus("Response code ready. Send it back to the host and wait for them to start the game.")
     } catch {
-      setSetupError("That host code could not be used. Double-check it and try again.")
+      setSetupError("That room code could not be used. Double-check it and try again.")
     }
   }
 
@@ -1256,12 +1256,12 @@ export default function Trivia() {
     {
       id: "host" as const,
       title: "Host a Game",
-      description: "Create a cross-device lobby and invite players with a host code.",
+      description: "Create a cross-device lobby and invite players with a room code.",
     },
     {
       id: "join" as const,
       title: "Join a Game",
-      description: "Paste a host code, return your response code, and play from another device.",
+      description: "Paste a room code, return your response code, and play from another device.",
     },
   ]
 
@@ -1274,7 +1274,7 @@ export default function Trivia() {
             <h1 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">Quiz Night</h1>
             <p className="mt-4 max-w-3xl text-base text-blue-100/85 md:text-lg">
               Build your own game-show table, host a no-server lobby across devices, or join a
-              match with a manual host code exchange.
+              match with a manual room code exchange.
             </p>
           </div>
 
@@ -1615,7 +1615,7 @@ export default function Trivia() {
                   <div>
                     <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Connected players</p>
                     <p className="mt-2 text-blue-100/75">
-                      Share a host code, then paste each guest's response code to add them.
+                      Share a room code, then paste each guest's response code to add them.
                     </p>
                   </div>
                   <div className="rounded-full bg-yellow-300 px-4 py-2 text-sm font-black text-blue-950">
@@ -1650,7 +1650,7 @@ export default function Trivia() {
                   onClick={createHostInvite}
                   className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
                 >
-                  Generate host code
+                  Generate room code
                 </button>
 
                 {hostInviteCode && (
@@ -1840,12 +1840,12 @@ export default function Trivia() {
                 onClick={promptForHostCode}
                 className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
               >
-                {joinHostCode ? "Change host code" : "Enter host code"}
+                {joinHostCode ? "Change room code" : "Enter room code"}
               </button>
 
               {joinHostCode && (
                 <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
-                  Host code captured. Generate your response code to continue.
+                  Room code captured. Generate your response code to continue.
                 </div>
               )}
 
@@ -1880,7 +1880,7 @@ export default function Trivia() {
             <div className="mt-6 space-y-4">
               {lobbyPlayers.length === 0 ? (
                 <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-blue-100/80">
-                  Paste a host code, generate your response code, and wait for the host to confirm.
+                  Paste a room code, generate your response code, and wait for the host to confirm.
                 </p>
               ) : (
                 lobbyPlayers.map((player, index) => (
