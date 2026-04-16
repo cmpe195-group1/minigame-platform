@@ -45,6 +45,11 @@ jobs:
         with:
           name: reports
           path: build/reports/
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: cmpe195-group1/minigame-platform
   frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
