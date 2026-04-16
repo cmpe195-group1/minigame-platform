@@ -32,12 +32,14 @@ export default function CardGrid() {
         {
           "title": "Knockout",
           "thumbnail": "game_knockout.png",
-          "genre": ["action", "local"]
+          "genre": ["action", "local"],
+          "fitWhole": true
         },
         {
           "title":"Checkers",
           "thumbnail":"game_checkers.png",
-          "genre": ["strategy"]
+          "genre": ["strategy"],
+           "fitWhole": true
         },
         {
             "title":"Anagrams",
@@ -47,12 +49,14 @@ export default function CardGrid() {
         {
             "title":"Trivia",
             "thumbnail":"trivia.png",
-            "genre": ["trivia", "quiz", "local"]
+            "genre": ["trivia", "quiz", "local"],
+            "fitWhole": true
         },
         {
             "title":"Uno",
             "thumbnail":"uno.webp",
-            "genre": ["local"]
+            "genre": ["local"],
+            "fitWhole": true
         }
     ];
 
