@@ -14,9 +14,9 @@ import Games from "@/pages/Games"
 import Search from "@/pages/Search"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
-import Trivia from "@/games/Trivia.tsx"
-import Anagrams from "@/games/Anagrams.tsx"
-import Uno from "@/games/Uno.tsx";
+import Trivia from "@/games/trivia/Trivia.tsx"
+import Anagrams from "@/games/anagrams/Anagrams.tsx"
+import Uno from "@/games/uno/Uno.tsx";
 import {type AuthSnapshot, signOutUser, startAuthListener, useAuthSnapshot} from "@/auth"
 
 function RequireAuth({ auth }: { auth: AuthSnapshot }) {
