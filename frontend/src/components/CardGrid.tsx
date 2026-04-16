@@ -26,7 +26,7 @@ export default function CardGrid() {
         },
         {
           "title":"Chess",
-          "thumbnail":"game_chess.png",
+          "thumbnail":"game_chess.jpg",
           "genre": ["strategy"]
         },
         {
@@ -36,7 +36,7 @@ export default function CardGrid() {
         },
         {
           "title":"Checkers",
-          "thumbnail":"game_checkers.jfif",
+          "thumbnail":"game_checkers.png",
           "genre": ["strategy"]
         },
         {
