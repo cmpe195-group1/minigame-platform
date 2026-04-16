@@ -2,7 +2,8 @@
 import SudokuPage from "@/pages/SudokuPage";
 import ArcheryPage from "@/pages/ArcheryPage";
 import BattleshipPage from "@/pages/BattleshipPage";
-import CheckersGameWrapper from "./games/checkers/CheckersGameWrapper"
+import ChessGameWrapper from "./games/chess/ChessGameWrapper";
+import KnockoutGameWrapper from "./games/knockout/KnockoutGameWrapper";
 import CheckersPage from "./pages/CheckersPage"
 import {StrictMode, useEffect} from "react"
 import {createRoot} from "react-dom/client"
@@ -57,6 +58,8 @@ export function App() {
               <Route path="/games/sudoku" element={<SudokuPage />} />
               <Route path="/games/archery" element={<ArcheryPage />} />
               <Route path="/games/battleship" element={<BattleshipPage />} />
+              <Route path="games/chess" element={<ChessGameWrapper />} />
+              <Route path="games/knockout" element={<KnockoutGameWrapper />} />
               <Route path="/games/checkers" element={<CheckersPage />} />
               <Route path="/games/search" element={<Search />} />
               <Route path="/games/trivia" element={<Trivia/>} />
