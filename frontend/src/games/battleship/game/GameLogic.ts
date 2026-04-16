@@ -4,9 +4,9 @@
  * Supports five game modes:
  * - "vs_computer": Player vs AI (random attacks)
  * - "multiplayer_local": Two players on the same device
- * - "multiplayer_online": Two players via BroadcastChannel/WebSocket
+ * - "multiplayer_online": Two players via Spring STOMP
  * - "multiplayer_local_4p": Four players on the same device
- * - "multiplayer_online_4p": Four players via BroadcastChannel/WebSocket
+ * - "multiplayer_online_4p": Four players via Spring STOMP
  */
 
 import { Board } from "./Board";

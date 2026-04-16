@@ -47,12 +47,12 @@ const Lobby: React.FC<LobbyProps> = ({
   const amReady  = me?.ready ?? false;
 
   const handleCreate = () => {
-    if (!connected || !name.trim()) return;
+    if (!connected) return;
     onCreate(name.trim(), maxPlayers);
   };
 
   const handleJoin = () => {
-    if (!connected || !name.trim() || joinCode.length < 5) return;
+    if (!connected || joinCode.length < 5) return;
     onJoin(joinCode.trim(), name.trim());
   };
 
@@ -229,7 +229,7 @@ const Lobby: React.FC<LobbyProps> = ({
   // ── Pre-room screen (Create / Join) ────────────────────────────────────────────
 
   const isConnecting = !connected && !error;
-  const isServerDown = !connected && !!error && error.includes('server');
+  const isServerDown = !connected && !!error && error.toLowerCase().includes('backend');
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-950 to-black">
@@ -288,10 +288,10 @@ const Lobby: React.FC<LobbyProps> = ({
                 <p className="text-red-300 text-sm font-semibold">{error}</p>
                 {isServerDown && (
                   <div className="mt-3 text-xs text-red-400/80 space-y-1 bg-black/20 rounded-xl p-3 font-mono">
-                    <p className="font-sans text-slate-400 font-bold mb-2">How to start the server:</p>
-                    <p className="text-green-400">$ npm run dev:server</p>
+                    <p className="font-sans text-slate-400 font-bold mb-2">How to start the backend:</p>
+                    <p className="text-green-400">$ .\\gradlew.bat bootRun</p>
                     <p className="text-slate-500 mt-1 font-sans text-[11px]">
-                      Or run both together: <span className="text-green-400">npm run dev</span>
+                      Run it from the repo root so the STOMP endpoint is available at <span className="text-green-400">/ws</span>
                     </p>
                   </div>
                 )}
@@ -326,7 +326,7 @@ const Lobby: React.FC<LobbyProps> = ({
           {/* Player name */}
           <div>
             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1">
-              Your Archer Name
+                  Your Archer Name (Optional)
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
@@ -338,7 +338,7 @@ const Lobby: React.FC<LobbyProps> = ({
                 value={name}
                 onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && (tab === 'create' ? handleCreate() : handleJoin())}
-                placeholder="Enter your name..."
+                placeholder="Enter your name or leave blank..."
                 className="w-full bg-black/20 border border-white/10 text-white placeholder-slate-600 rounded-2xl pl-11 pr-4 py-4 font-semibold focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all shadow-inner"
               />
             </div>
@@ -370,14 +370,14 @@ const Lobby: React.FC<LobbyProps> = ({
 
               <button
                 onClick={handleCreate}
-                disabled={!connected || !name.trim()}
+                disabled={!connected}
                 className={`w-full py-4.5 font-black text-lg rounded-2xl transition-all active:scale-95 relative overflow-hidden group ${
-                  connected && name.trim()
+                  connected
                     ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-[0_0_20px_rgba(245,158,11,0.3)] border border-amber-400/50'
                     : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5'
                 }`}
               >
-                {connected && name.trim() && <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12" />}
+                {connected && <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12" />}
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   {!connected ? `Connecting${dots}` : '🏕️ Create Room'}
                 </span>
@@ -408,14 +408,14 @@ const Lobby: React.FC<LobbyProps> = ({
 
               <button
                 onClick={handleJoin}
-                disabled={!connected || !name.trim() || joinCode.length < 5}
+                disabled={!connected || joinCode.length < 5}
                 className={`w-full py-4.5 font-black text-lg rounded-2xl transition-all active:scale-95 relative overflow-hidden group ${
-                  connected && name.trim() && joinCode.length >= 5
+                  connected && joinCode.length >= 5
                     ? 'bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-400 hover:to-violet-400 text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] border border-indigo-400/50'
                     : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5'
                 }`}
               >
-                {connected && name.trim() && joinCode.length >= 5 && <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12" />}
+                {connected && joinCode.length >= 5 && <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12" />}
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   {!connected ? `Connecting${dots}` : '🔗 Join Room'}
                 </span>
