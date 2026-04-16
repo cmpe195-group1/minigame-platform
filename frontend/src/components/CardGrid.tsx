@@ -25,6 +25,16 @@ export default function CardGrid() {
             "genre":["strategy"]
         },
         {
+          "title":"Chess",
+          "thumbnail":"game_chess.png",
+          "genre": ["strategy"]
+        },
+        {
+          "title": "Knockout",
+          "thumbnail": "game_knockout.png",
+          "genre": ["action", "local"]
+        },
+        {
           "title":"Checkers",
           "thumbnail":"game_checkers.jfif",
           "genre": ["strategy"]
