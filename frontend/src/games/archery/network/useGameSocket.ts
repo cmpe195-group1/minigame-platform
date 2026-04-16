@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs";
+import { BACKEND_URL } from "../../../backend";
 
 export interface ArrowScore {
   round: number;
@@ -92,16 +93,9 @@ export function useGameSocket(): UseGameSocketReturn {
   const roomDestinationRef = useRef<string | null>(null);
 
   const resolveBrokerUrl = useCallback(() => {
-    const override =
-      (import.meta.env.VITE_ARCHERY_WS_URL as string | undefined)?.trim() ||
-      (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
-
-    if (override) {
-      return override;
-    }
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${window.location.host}/ws`;
+    const base = BACKEND_URL.replace(/\/+$/, "");
+    console.log(`${base.replace(/^http/, "ws")}/ws`);
+    return `${base.replace(/^http/, "ws")}/ws`;
   }, []);
 
   const applyRoomState = useCallback((nextRoom: RoomSnapshot | null) => {
