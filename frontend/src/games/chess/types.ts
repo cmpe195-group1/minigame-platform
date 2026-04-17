@@ -1,3 +1,10 @@
+export type Player = "white" | "black";
+
+export interface Position {
+  x: number;
+  y: number;
+}
+
 export type Color = "white" | "black";
 export type PieceType = "pawn" | "rook" | "knight" | "bishop" | "queen" | "king";
 

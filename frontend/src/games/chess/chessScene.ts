@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { createInitialBoard } from "./rules";
 import { chessReducer } from "./reducer";
-import type { ChessState } from "./types";
+import type { ChessState, Position } from "./types";
 
 import black_bishop from "./assets/black_bishop.png";
 import black_king from "./assets/black_king.png";
@@ -17,6 +17,12 @@ import white_queen from "./assets/white_queen.png";
 import white_rook from "./assets/white_rook.png";
 
 const TILE_SIZE = 64;
+
+export type MovePayload = {
+  from: Position;
+  to: Position;
+  resultingState: ChessState;
+};
 
 
 export class ChessScene extends Phaser.Scene {

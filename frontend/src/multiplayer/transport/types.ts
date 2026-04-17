@@ -18,6 +18,7 @@ export interface BaseRoomState<TGameState, TParticipant = BaseRoomParticipant> {
   participants: TParticipant[];
   status: "waiting" | "playing" | "finished";
   transport: "websocket";
+  gameState: TGameState | null
   roomState: TGameState | null
 }
 

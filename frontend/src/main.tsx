@@ -18,7 +18,9 @@ import RegisterPage from "@/pages/RegisterPage"
 import Trivia from "@/games/trivia/Trivia.tsx"
 import Anagrams from "@/games/anagrams/Anagrams.tsx"
 import Uno from "@/games/uno/Uno.tsx";
-import {type AuthSnapshot, signOutUser, startAuthListener, useAuthSnapshot} from "@/auth"
+import {type AuthSnapshot, signOutUser, startAuthListener, useAuthSnapshot} from "@/auth";
+
+import ChessPage from "./pages/ChessPage";
 
 function RequireAuth({ auth }: { auth: AuthSnapshot }) {
   if (auth.initializing) {
@@ -65,6 +67,7 @@ export function App() {
               <Route path="/games/trivia" element={<Trivia/>} />
               <Route path="/games/anagrams" element={<Anagrams />} />
               <Route path="/games/uno" element={<Uno />} />
+              <Route path="/test/chess" element={<ChessPage/>}/>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
