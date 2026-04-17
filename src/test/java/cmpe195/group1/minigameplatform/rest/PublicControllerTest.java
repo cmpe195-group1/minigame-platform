@@ -24,7 +24,7 @@ class PublicControllerTest {
 
     @Test
     void ping() {
-        assertThat(mockMvcTester.get().uri("/ping"))
+        assertThat(mockMvcTester.get().uri("/ping").header("X-Test-Header", "TestValue"))
                 .hasStatusOk()
                 .bodyText().contains("Pong");
     }

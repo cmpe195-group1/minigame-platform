@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.enums.SecuritySchemeIn;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
+import lombok.Generated;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -16,6 +17,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
         in = SecuritySchemeIn.HEADER)
 public class RestApplication {
 
+    @Generated // exclude from test coverage
     static void main(String[] args) {
         SpringApplication.run(RestApplication.class, args);
     }

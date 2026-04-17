@@ -30,6 +30,7 @@ public class User {
 
     /* auto-generated equals and hashCode methods by IntelliJ for JPA */
 
+    @Generated
     @Override
     public final boolean equals(Object o) {
         if (this == o) return true;
@@ -41,6 +42,7 @@ public class User {
         return getId() != null && Objects.equals(getId(), user.getId());
     }
 
+    @Generated
     @Override
     public final int hashCode() {
         return this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();

@@ -13,7 +13,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -74,7 +74,8 @@ class AuthenticatedControllerTest {
         var userId = "user-race";
 
         when(userRepository.existsById(userId)).thenReturn(false);
-        when(userRepository.save(any())).thenThrow(
+        var when = when(userRepository.save(any()));
+        when.thenThrow(
                 new DataIntegrityViolationException("duplicate key value violates unique constraint"));
 
         assertThat(
@@ -82,6 +83,12 @@ class AuthenticatedControllerTest {
                         .with(SecurityMockMvcRequestPostProcessors.jwt()
                                 .jwt(jwt -> jwt.subject(userId).claim("email", "race@example.com")))
         ).hasStatus4xxClientError();
+
+        when.thenThrow(new DataIntegrityViolationException("some other exception"));
+        assertThat(mockMvcTester.get().uri("/auth/signin")
+                .with(SecurityMockMvcRequestPostProcessors.jwt()
+                        .jwt(jwt -> jwt.subject(userId).claim("email", "race@example.com"))).exchange().getUnresolvedException())
+                .isNotNull();
     }
 
     @Test
