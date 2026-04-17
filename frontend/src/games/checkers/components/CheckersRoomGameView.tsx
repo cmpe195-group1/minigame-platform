@@ -1,6 +1,6 @@
 import CheckersGameWrapper from "../CheckersGameWrapper";
 import type { MovePayload } from "../checkersScene";
-import type { RoomState } from "../room/RoomTypes";
+import type { RoomState } from "../room/CheckersRoomTypes";
 import type { Player } from "../types";
 
 interface Props {
