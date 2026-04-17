@@ -1,37 +1,25 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react"
 
 // @ts-expect-error word-exists does not have bundled types
 import wordExists from "word-exists"
+import { useRoomGame } from "./room/useRoomGame"
+import type { RoomState as AnagramsRoomState } from "./room/RoomTypes"
+import {
+  DEFAULT_SETTINGS,
+  HOST_PLAYER_ID,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  type BroadcastGameState,
+  type LobbyPlayer,
+  type Phase,
+  type PlayerRecord,
+  type RoundSettings,
+  type SubmissionStatus,
+  type SubmittedWord,
+} from "./types"
 
-type Phase = "setup" | "playing" | "results"
 type SetupMode = "local" | "host" | "join"
-
-interface RoundSettings {
-  letterCount: number
-  minimumWordLength: number
-  turnSeconds: number
-}
-
-interface SubmittedWord {
-  value: string
-  points: number
-}
-
-interface PlayerRecord {
-  id: string
-  name: string
-  score: number
-  words: SubmittedWord[]
-  attempts: number
-}
-
-const MIN_PLAYERS = 2
-const MAX_PLAYERS = 6
-const DEFAULT_SETTINGS: RoundSettings = {
-  letterCount: 8,
-  minimumWordLength: 3,
-  turnSeconds: 45,
-}
+type PlayMode = "local" | "host" | "guest"
 
 const VOWEL_BAG = "AAAAAAAAEEEEEEEEIIIIIIIOOOOOOUUUUY"
 const CONSONANT_BAG = "BBBBCCDDDFFGGHHJKLLLMMMNNNNNPPQRRRRRSSSSTTTTTTVVWWXZZ"
@@ -60,6 +48,14 @@ function getPlacementLabel(position: number) {
   if (position === 2) return "2nd"
   if (position === 3) return "3rd"
   return `${position}th`
+}
+
+function areSettingsEqual(left: RoundSettings, right: RoundSettings) {
+  return (
+    left.letterCount === right.letterCount &&
+    left.minimumWordLength === right.minimumWordLength &&
+    left.turnSeconds === right.turnSeconds
+  )
 }
 
 function normalizeWord(value: string) {
@@ -143,10 +139,87 @@ function getBestWord(words: SubmittedWord[]) {
   })[0].value.toUpperCase()
 }
 
+function validateRoundSettings(settings: RoundSettings) {
+  if (settings.letterCount < 5 || settings.letterCount > 12) {
+    return "Choose between 5 and 12 available letters for the round."
+  }
+
+  if (settings.minimumWordLength < 3 || settings.minimumWordLength > settings.letterCount) {
+    return "Minimum word length must be at least 3 and no more than the letter count."
+  }
+
+  if (settings.turnSeconds < 15 || settings.turnSeconds > 180) {
+    return "Choose a turn timer between 15 and 180 seconds."
+  }
+
+  return ""
+}
+
+function validateSubmittedWord(
+  rawValue: string,
+  player: PlayerRecord,
+  settings: RoundSettings,
+  sharedLetters: string[],
+) {
+  const normalizedWord = normalizeWord(rawValue)
+
+  if (!normalizedWord) {
+    return { normalizedWord, error: "Type a word before you submit." }
+  }
+
+  if (!isAlphabeticWord(normalizedWord)) {
+    return { normalizedWord, error: "Only letters A–Z are allowed in submitted words." }
+  }
+
+  if (normalizedWord.length < settings.minimumWordLength) {
+    return {
+      normalizedWord,
+      error: `Words must be at least ${settings.minimumWordLength} letters long.`,
+    }
+  }
+
+  if (!canSpellFromPool(normalizedWord, sharedLetters)) {
+    return {
+      normalizedWord,
+      error: "That word uses letters that are not available in the shared pool.",
+    }
+  }
+
+  if (player.words.some((word) => word.value === normalizedWord)) {
+    return {
+      normalizedWord,
+      error: "You already banked that word this turn. Try a different one.",
+    }
+  }
+
+  const exists = (() => {
+    try {
+      return Boolean(wordExists(normalizedWord))
+    } catch {
+      return false
+    }
+  })()
+
+  if (!exists) {
+    return { normalizedWord, error: "That word is not in the dictionary." }
+  }
+
+  return { normalizedWord, error: "" }
+}
+
 export default function Anagrams() {
+  const room = useRoomGame()
+
   const [phase, setPhase] = useState<Phase>("setup")
   const [setupMode, setSetupMode] = useState<SetupMode>("local")
+  const [playMode, setPlayMode] = useState<PlayMode>("local")
   const [playerNames, setPlayerNames] = useState<string[]>(["", ""])
+  const [hostName, setHostName] = useState("")
+  const [joinName, setJoinName] = useState("")
+  const [joinHostCode, setJoinHostCode] = useState("")
+  const [hostStatus, setHostStatus] = useState("")
+  const [joinStatus, setJoinStatus] = useState("")
+  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([])
   const [settings, setSettings] = useState<RoundSettings>(DEFAULT_SETTINGS)
   const [players, setPlayers] = useState<PlayerRecord[]>([])
   const [sharedLetters, setSharedLetters] = useState<string[]>([])
@@ -155,7 +228,15 @@ export default function Anagrams() {
   const [currentEntry, setCurrentEntry] = useState("")
   const [setupError, setSetupError] = useState("")
   const [turnMessage, setTurnMessage] = useState("")
-  const [lastSubmissionStatus, setLastSubmissionStatus] = useState<"accepted" | "rejected" | null>(null)
+  const [lastSubmissionStatus, setLastSubmissionStatus] = useState<SubmissionStatus | null>(null)
+  const [localPlayerId, setLocalPlayerId] = useState<string | null>(null)
+
+  const phaseRef = useRef(phase)
+  const currentTurnRef = useRef(currentTurn)
+  const playersRef = useRef(players)
+  const playModeRef = useRef(playMode)
+  const localPlayerIdRef = useRef(localPlayerId)
+  const lastHandledPendingActionIdRef = useRef<number | null>(null)
 
   const activePlayerIndex = players.length > 0 ? Math.min(currentTurn, players.length - 1) : 0
   const activePlayer = players[activePlayerIndex] ?? null
@@ -195,23 +276,70 @@ export default function Anagrams() {
     }
   }, [sharedLetters])
 
+  useEffect(() => {
+    phaseRef.current = phase
+    currentTurnRef.current = currentTurn
+    playersRef.current = players
+    playModeRef.current = playMode
+    localPlayerIdRef.current = localPlayerId
+  }, [phase, currentTurn, players, playMode, localPlayerId])
+
+  const resetRoundState = useCallback(
+    (nextSeconds = settings.turnSeconds) => {
+      setPlayers([])
+      setSharedLetters([])
+      setCurrentTurn(0)
+      setSecondsLeft(nextSeconds)
+      setCurrentEntry("")
+      setTurnMessage("")
+      setLastSubmissionStatus(null)
+    },
+    [settings.turnSeconds],
+  )
+
   const resetForSetup = useCallback(() => {
     setPhase("setup")
-    setPlayers([])
-    setSharedLetters([])
-    setCurrentTurn(0)
-    setSecondsLeft(settings.turnSeconds)
-    setCurrentEntry("")
-    setTurnMessage("")
-    setLastSubmissionStatus(null)
+    resetRoundState(settings.turnSeconds)
     setSetupError("")
-  }, [settings.turnSeconds])
+  }, [resetRoundState, settings.turnSeconds])
+
+  const resetNetworkState = useCallback(
+    (nextMode?: SetupMode) => {
+      if (room.role !== "none") {
+        room.leaveRoom()
+      }
+
+      setPlayMode(nextMode === "join" ? "guest" : "local")
+      setLocalPlayerId(null)
+      setLobbyPlayers([])
+      setHostStatus("")
+      setJoinHostCode("")
+      setJoinStatus("")
+    },
+    [room],
+  )
+
+  const buildSnapshot = useCallback(
+    (override?: Partial<BroadcastGameState>): BroadcastGameState => ({
+      phase,
+      players,
+      sharedLetters,
+      currentTurn,
+      secondsLeft,
+      settings,
+      turnMessage,
+      lastSubmissionStatus,
+      ...override,
+    }),
+    [phase, players, sharedLetters, currentTurn, secondsLeft, settings, turnMessage, lastSubmissionStatus],
+  )
 
   const handleSetupModeChange = (nextMode: SetupMode) => {
     if (nextMode === setupMode) {
       return
     }
 
+    resetNetworkState(nextMode)
     resetForSetup()
     setSetupMode(nextMode)
   }
@@ -247,6 +375,7 @@ export default function Anagrams() {
 
     if (currentTurn + 1 >= players.length) {
       setPhase("results")
+      setSecondsLeft(0)
       return
     }
 
@@ -254,8 +383,150 @@ export default function Anagrams() {
     setSecondsLeft(settings.turnSeconds)
   }, [currentTurn, players.length, settings.turnSeconds])
 
+  const applyGuestGameState = useCallback(
+    (nextState: BroadcastGameState, yourPlayerId: string | null, roomState?: AnagramsRoomState | null) => {
+      const nextActivePlayer = nextState.players[Math.min(nextState.currentTurn, Math.max(nextState.players.length - 1, 0))] ?? null
+
+      setPlayMode("guest")
+      setLocalPlayerId(yourPlayerId)
+      setPhase(nextState.phase)
+      setPlayers(nextState.players)
+      setSharedLetters(nextState.sharedLetters)
+      setCurrentTurn(nextState.currentTurn)
+      setSecondsLeft(nextState.secondsLeft)
+      setSettings(nextState.settings)
+      setTurnMessage(nextState.turnMessage)
+      setLastSubmissionStatus(nextState.lastSubmissionStatus)
+
+      if (nextState.phase !== "playing" || nextActivePlayer?.id !== yourPlayerId) {
+        setCurrentEntry("")
+      }
+
+      if (roomState?.systemMessage) {
+        setJoinStatus(roomState.systemMessage)
+      } else if (nextState.phase === "results") {
+        setJoinStatus("Match complete. Waiting for the host to start another round.")
+      } else if (nextState.phase === "playing") {
+        setJoinStatus(
+          nextActivePlayer?.id === yourPlayerId
+            ? "It is your turn to build words."
+            : `Waiting for ${nextActivePlayer?.name ?? "the active player"}.`,
+        )
+      } else {
+        setJoinStatus("Connected to the lobby. Waiting for the host to start the round.")
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
-    if (phase !== "playing") {
+    if (!room.joinError) {
+      return
+    }
+
+    setSetupError(room.joinError)
+
+    if (setupMode === "join") {
+      setJoinStatus(room.joinError)
+    }
+
+    if (setupMode === "host") {
+      setHostStatus(room.joinError)
+    }
+  }, [room.joinError, setupMode])
+
+  useEffect(() => {
+    if (setupMode !== "host" || phase !== "setup") {
+      return
+    }
+
+    if (room.roomState) {
+      setLobbyPlayers(room.roomState.participants.map((player) => ({ id: player.playerId, name: player.name })))
+      return
+    }
+
+    const trimmedHostName = hostName.trim()
+    setLobbyPlayers(trimmedHostName ? [{ id: HOST_PLAYER_ID, name: trimmedHostName }] : [])
+  }, [hostName, phase, room.roomState, setupMode])
+
+  useEffect(() => {
+    const roomState = room.roomState
+
+    if (!roomState) {
+      return
+    }
+
+    const nextLobbyPlayers = roomState.participants.map((player) => ({
+      id: player.playerId,
+      name: player.name,
+    }))
+
+    setLobbyPlayers(nextLobbyPlayers)
+
+    if (room.role === "host") {
+      setPlayMode("host")
+      setLocalPlayerId(HOST_PLAYER_ID)
+      setSettings((currentSettings) =>
+        areSettingsEqual(currentSettings, roomState.settings) ? currentSettings : roomState.settings,
+      )
+
+      if (!roomState.gameState && roomState.systemMessage && phase !== "setup") {
+        setPhase("setup")
+        resetRoundState(roomState.settings.turnSeconds)
+      }
+
+      if (phase === "setup") {
+        setHostStatus(
+          roomState.systemMessage ?? "Room code ready. Share it with guests so they can join your lobby.",
+        )
+      }
+      return
+    }
+
+    if (room.role !== "guest") {
+      return
+    }
+
+    setSettings((currentSettings) =>
+      areSettingsEqual(currentSettings, roomState.settings) ? currentSettings : roomState.settings,
+    )
+
+    const yourParticipant = roomState.participants.find((player) => player.clientId === room.myClientId) ?? null
+    const yourPlayerId = yourParticipant?.playerId ?? null
+
+    setSetupMode("join")
+    setPlayMode("guest")
+    setLocalPlayerId(yourPlayerId)
+
+    if (roomState.gameState) {
+      applyGuestGameState(roomState.gameState, yourPlayerId, roomState)
+      return
+    }
+
+    setPhase("setup")
+    setPlayers([])
+    setSharedLetters([])
+    setCurrentTurn(0)
+    setSecondsLeft(roomState.settings.turnSeconds)
+    setCurrentEntry("")
+    setTurnMessage("")
+    setLastSubmissionStatus(null)
+    setJoinStatus(
+      roomState.systemMessage ??
+        `Connected to ${(nextLobbyPlayers.find((player) => player.id === HOST_PLAYER_ID)?.name ?? "the host")}'s lobby. Waiting for the host to start.`,
+    )
+  }, [applyGuestGameState, phase, resetRoundState, room.myClientId, room.role, room.roomState])
+
+  useEffect(() => {
+    if (setupMode !== "host" || phase !== "setup" || room.role !== "host" || !room.roomState?.roomCode) {
+      return
+    }
+
+    room.updateSettings(settings)
+  }, [phase, room.role, room.roomState?.roomCode, room.updateSettings, settings, setupMode])
+
+  useEffect(() => {
+    if (phase !== "playing" || playMode === "guest") {
       return
     }
 
@@ -271,7 +542,112 @@ export default function Anagrams() {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [advanceTurn, phase, secondsLeft])
+  }, [advanceTurn, phase, playMode, secondsLeft])
+
+  useEffect(() => {
+    if (playMode !== "host" || room.role !== "host") {
+      return
+    }
+
+    const pendingAction = room.roomState?.pendingAction
+
+    if (!pendingAction || lastHandledPendingActionIdRef.current === pendingAction.submissionId) {
+      return
+    }
+
+    lastHandledPendingActionIdRef.current = pendingAction.submissionId
+
+    const currentPlayers = playersRef.current
+    const activeIndex = currentPlayers.length ? Math.min(currentTurnRef.current, currentPlayers.length - 1) : 0
+    const currentActivePlayer = currentPlayers[activeIndex] ?? null
+
+    if (
+      playModeRef.current !== "host" ||
+      phaseRef.current !== "playing" ||
+      !currentActivePlayer ||
+      currentActivePlayer.id !== pendingAction.playerId
+    ) {
+      return
+    }
+
+    if (pendingAction.actionType === "submit_word" && pendingAction.word) {
+      const { normalizedWord, error } = validateSubmittedWord(
+        pendingAction.word,
+        currentActivePlayer,
+        settings,
+        sharedLetters,
+      )
+
+      if (error) {
+        setPlayers((currentPlayersState) =>
+          currentPlayersState.map((player, index) =>
+            index === activeIndex ? { ...player, attempts: player.attempts + 1 } : player,
+          ),
+        )
+        setTurnMessage(error)
+        setLastSubmissionStatus("rejected")
+        return
+      }
+
+      const points = scoreWord(normalizedWord.length)
+      setPlayers((currentPlayersState) =>
+        currentPlayersState.map((player, index) =>
+          index === activeIndex
+            ? {
+                ...player,
+                attempts: player.attempts + 1,
+                score: player.score + points,
+                words: [...player.words, { value: normalizedWord, points }],
+              }
+            : player,
+        ),
+      )
+      setTurnMessage(`${normalizedWord.toUpperCase()} scores ${points} point${points === 1 ? "" : "s"}.`)
+      setLastSubmissionStatus("accepted")
+      return
+    }
+
+    if (pendingAction.actionType === "end_turn") {
+      advanceTurn()
+    }
+  }, [advanceTurn, phase, playMode, room.role, room.roomState?.pendingAction, settings, sharedLetters])
+
+  useEffect(() => {
+    if (phase === "setup" || room.role !== "host" || !room.roomState?.roomCode) {
+      return
+    }
+
+    room.publishState(buildSnapshot())
+  }, [buildSnapshot, phase, room.publishState, room.role, room.roomState?.roomCode])
+
+  useEffect(() => {
+    if (setupMode !== "host" || phase !== "setup" || room.role !== "host" || !room.roomState?.roomCode) {
+      return
+    }
+
+    room.publishState(
+      buildSnapshot({
+        phase: "setup",
+        players: [],
+        sharedLetters: [],
+        currentTurn: 0,
+        secondsLeft: settings.turnSeconds,
+        turnMessage: "",
+        lastSubmissionStatus: null,
+      }),
+    )
+  }, [buildSnapshot, phase, room.publishState, room.role, room.roomState?.roomCode, settings.turnSeconds, setupMode])
+
+  useEffect(() => {
+    if (phase !== "playing") {
+      setCurrentEntry("")
+      return
+    }
+
+    if (playMode !== "local" && activePlayer?.id !== localPlayerId) {
+      setCurrentEntry("")
+    }
+  }, [activePlayer?.id, localPlayerId, phase, playMode])
 
   const startLocalMatch = () => {
     const trimmedNames = playerNames.map((name) => name.trim()).filter(Boolean)
@@ -287,22 +663,15 @@ export default function Anagrams() {
       return
     }
 
-    if (settings.letterCount < 5 || settings.letterCount > 12) {
-      setSetupError("Choose between 5 and 12 available letters for the round.")
-      return
-    }
-
-    if (settings.minimumWordLength < 3 || settings.minimumWordLength > settings.letterCount) {
-      setSetupError("Minimum word length must be at least 3 and no more than the letter count.")
-      return
-    }
-
-    if (settings.turnSeconds < 15 || settings.turnSeconds > 180) {
-      setSetupError("Choose a turn timer between 15 and 180 seconds.")
+    const settingsError = validateRoundSettings(settings)
+    if (settingsError) {
+      setSetupError(settingsError)
       return
     }
 
     setSetupError("")
+    setPlayMode("local")
+    setLocalPlayerId(null)
     setPlayers(
       trimmedNames.map((name, index) => ({
         id: createPlayerId(index),
@@ -321,6 +690,112 @@ export default function Anagrams() {
     setPhase("playing")
   }
 
+  const startHostedMatch = () => {
+    const trimmedHostName = hostName.trim()
+
+    if (!trimmedHostName) {
+      setSetupError("Enter your host player name before starting the hosted match.")
+      return
+    }
+
+    if (lobbyPlayers.length < MIN_PLAYERS) {
+      setSetupError("At least one guest must join the lobby before the hosted match can start.")
+      return
+    }
+
+    if (!room.roomState?.roomCode) {
+      setSetupError("Generate a room code before starting the hosted match.")
+      return
+    }
+
+    const settingsError = validateRoundSettings(settings)
+    if (settingsError) {
+      setSetupError(settingsError)
+      return
+    }
+
+    setSetupError("")
+    setPlayMode("host")
+    setLocalPlayerId(HOST_PLAYER_ID)
+    setPlayers(
+      lobbyPlayers.map((player) => ({
+        id: player.id,
+        name: player.name,
+        score: 0,
+        words: [],
+        attempts: 0,
+      })),
+    )
+    setSharedLetters(generateLetterPool(settings.letterCount))
+    setCurrentTurn(0)
+    setSecondsLeft(settings.turnSeconds)
+    setCurrentEntry("")
+    setTurnMessage("")
+    setLastSubmissionStatus(null)
+    setPhase("playing")
+    setHostStatus("Hosted match started.")
+  }
+
+  const createHostInvite = () => {
+    const trimmedHostName = hostName.trim()
+
+    if (!trimmedHostName) {
+      setSetupError("Enter your host player name before creating an invite code.")
+      return
+    }
+
+    setSetupError("")
+    setPlayMode("host")
+    setLocalPlayerId(HOST_PLAYER_ID)
+
+    if (room.role !== "none") {
+      room.leaveRoom()
+    }
+
+    room.createRoom(trimmedHostName, MAX_PLAYERS)
+    setHostStatus("Creating room code...")
+  }
+
+  const generateJoinResponse = () => {
+    const trimmedJoinName = joinName.trim()
+
+    if (!trimmedJoinName) {
+      setSetupError("Enter your player name before joining a hosted match.")
+      return
+    }
+
+    if (!joinHostCode.trim()) {
+      setSetupError("Enter the host room code before joining the lobby.")
+      return
+    }
+
+    setSetupError("")
+
+    if (room.role !== "none") {
+      room.leaveRoom()
+    }
+
+    room.joinRoom(joinHostCode, trimmedJoinName)
+    setJoinStatus("Joining the host lobby...")
+  }
+
+  const handleReplayAction = () => {
+    if (playMode === "host" && room.role === "host") {
+      setSetupMode("host")
+      setPhase("setup")
+      resetRoundState(settings.turnSeconds)
+      setHostStatus("Round reset. Keep the same room code and start another match whenever you're ready.")
+      return
+    }
+
+    if (playMode === "guest") {
+      setJoinStatus("Waiting for the host to start another round.")
+      return
+    }
+
+    resetForSetup()
+  }
+
   const submitWord = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -328,58 +803,42 @@ export default function Anagrams() {
       return
     }
 
-    const normalizedWord = normalizeWord(currentEntry)
+    const { normalizedWord, error } = validateSubmittedWord(currentEntry, activePlayer, settings, sharedLetters)
 
-    const rejectSubmission = (message: string) => {
+    if (playMode === "guest") {
+      if (activePlayer.id !== localPlayerId) {
+        return
+      }
+
+      if (error) {
+        setTurnMessage(error)
+        setLastSubmissionStatus("rejected")
+        return
+      }
+
+      room.submitWord(normalizedWord)
+      setCurrentEntry("")
+      setTurnMessage("Checking word with the host...")
+      setLastSubmissionStatus(null)
+      return
+    }
+
+    if (playMode === "host" && activePlayer.id !== localPlayerId) {
+      return
+    }
+
+    if (error) {
       setPlayers((currentPlayers) =>
         currentPlayers.map((player, index) =>
           index === activePlayerIndex ? { ...player, attempts: player.attempts + 1 } : player,
         ),
       )
-      setTurnMessage(message)
+      setTurnMessage(error)
       setLastSubmissionStatus("rejected")
-    }
-
-    if (!normalizedWord) {
-      rejectSubmission("Type a word before you submit.")
-      return
-    }
-
-    if (!isAlphabeticWord(normalizedWord)) {
-      rejectSubmission("Only letters A–Z are allowed in submitted words.")
-      return
-    }
-
-    if (normalizedWord.length < settings.minimumWordLength) {
-      rejectSubmission(`Words must be at least ${settings.minimumWordLength} letters long.`)
-      return
-    }
-
-    if (!canSpellFromPool(normalizedWord, sharedLetters)) {
-      rejectSubmission("That word uses letters that are not available in the shared pool.")
-      return
-    }
-
-    if (activePlayer.words.some((word) => word.value === normalizedWord)) {
-      rejectSubmission("You already banked that word this turn. Try a different one.")
-      return
-    }
-
-    const exists = (() => {
-      try {
-        return Boolean(wordExists(normalizedWord))
-      } catch {
-        return false
-      }
-    })()
-
-    if (!exists) {
-      rejectSubmission("That word is not in the dictionary.")
       return
     }
 
     const points = scoreWord(normalizedWord.length)
-
     setPlayers((currentPlayers) =>
       currentPlayers.map((player, index) =>
         index === activePlayerIndex
@@ -396,6 +855,37 @@ export default function Anagrams() {
     setTurnMessage(`${normalizedWord.toUpperCase()} scores ${points} point${points === 1 ? "" : "s"}.`)
     setLastSubmissionStatus("accepted")
   }
+
+  const handleEndTurn = () => {
+    if (!activePlayer) {
+      return
+    }
+
+    if (playMode === "guest") {
+      if (activePlayer.id !== localPlayerId) {
+        return
+      }
+
+      room.endTurn()
+      setCurrentEntry("")
+      setTurnMessage("Ending your turn...")
+      setLastSubmissionStatus(null)
+      return
+    }
+
+    if (playMode === "host" && activePlayer.id !== localPlayerId) {
+      return
+    }
+
+    advanceTurn()
+  }
+
+  const canLocalSubmitWord =
+    phase === "playing" &&
+    !!activePlayer &&
+    (playMode === "local" || activePlayer.id === localPlayerId)
+
+  const canControlTurn = canLocalSubmitWord
 
   const modeCards = [
     {
@@ -440,7 +930,11 @@ export default function Anagrams() {
             <div>
               <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Connection</p>
               <p className="mt-2 text-lg font-semibold">
-                {setupMode === "local" ? "Same device" : "Network multiplayer coming soon"}
+                {setupMode === "local"
+                  ? "Same device"
+                  : room.isConnected
+                    ? "Shared WebSocket room code"
+                    : "Connecting to server"}
               </p>
             </div>
           </div>
@@ -700,70 +1194,179 @@ export default function Anagrams() {
             <h2 className="mt-2 text-3xl font-bold">Host a game</h2>
 
             <div className="mt-6 space-y-5">
-              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/80">
-                Hosted multiplayer is planned to match Trivia's manual code-sharing flow, but this
-                Anagrams mode is still local-only for now.
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Host player name
+                </label>
+                <input
+                  value={hostName}
+                  onChange={(event) => setHostName(event.target.value)}
+                  placeholder="Enter your name as the host"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Connected players</p>
+                    <p className="mt-2 text-blue-100/75">
+                      Generate a room code, share it with your guests, and wait for them to join.
+                    </p>
+                  </div>
+                  <div className="rounded-full bg-yellow-300 px-4 py-2 text-sm font-black text-blue-950">
+                    {lobbyPlayers.length}
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {lobbyPlayers.length === 0 ? (
+                    <p className="rounded-2xl bg-blue-900/60 px-4 py-3 text-blue-100/80">No lobby players yet.</p>
+                  ) : (
+                    lobbyPlayers.map((player, index) => (
+                      <div
+                        key={player.id}
+                        className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3"
+                      >
+                        <span>
+                          {index + 1}. {player.name}
+                        </span>
+                        <span className="text-xs uppercase tracking-[0.25em] text-cyan-100">
+                          {player.id === HOST_PLAYER_ID ? "Host" : "Guest"}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col gap-3">
                 <button
                   type="button"
-                  disabled
-                  className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 opacity-60"
+                  onClick={createHostInvite}
+                  className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
                 >
-                  Generate room code
+                  {room.roomState?.roomCode ? "Generate new room code" : "Generate room code"}
                 </button>
 
-                <textarea
-                  disabled
-                  placeholder="Guest response codes will appear here in a future update"
-                  className="min-h-28 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-white outline-none placeholder:text-blue-200/45 opacity-60"
-                />
-
-                <button
-                  type="button"
-                  disabled
-                  className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white opacity-60"
-                >
-                  Apply guest response code
-                </button>
+                {room.roomState?.roomCode && (
+                  <textarea
+                    readOnly
+                    value={room.roomState.roomCode}
+                    className="min-h-36 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-center font-mono text-sm tracking-[0.35em] text-blue-50 outline-none"
+                  />
+                )}
               </div>
 
-              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
-                Local multiplayer is fully playable now. Hosted play UI is shown here for future
-                parity with Trivia.
-              </div>
+              {hostStatus && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  {hostStatus}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
             <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Round setup</p>
-            <h2 className="mt-2 text-3xl font-bold">Hosted match preview</h2>
+            <h2 className="mt-2 text-3xl font-bold">Configure the hosted match</h2>
 
-            <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-4">
-                  <span>Available letters</span>
-                  <span className="font-semibold text-white">{settings.letterCount}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Minimum word length</span>
-                  <span className="font-semibold text-white">{settings.minimumWordLength}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Seconds per player</span>
-                  <span className="font-semibold text-white">{settings.turnSeconds}</span>
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Available letters
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={12}
+                  value={settings.letterCount}
+                  onChange={(event) =>
+                    setSettings((currentSettings) => ({
+                      ...currentSettings,
+                      letterCount: Math.min(12, Math.max(5, Number(event.target.value) || 5)),
+                      minimumWordLength: Math.min(
+                        currentSettings.minimumWordLength,
+                        Math.min(12, Math.max(5, Number(event.target.value) || 5)),
+                      ),
+                    }))
+                  }
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Minimum word length
+                </label>
+                <input
+                  type="number"
+                  min={3}
+                  max={settings.letterCount}
+                  value={settings.minimumWordLength}
+                  onChange={(event) =>
+                    setSettings((currentSettings) => ({
+                      ...currentSettings,
+                      minimumWordLength: Math.min(
+                        currentSettings.letterCount,
+                        Math.max(3, Number(event.target.value) || 3),
+                      ),
+                    }))
+                  }
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Seconds per player
+                </label>
+                <input
+                  type="number"
+                  min={15}
+                  max={180}
+                  value={settings.turnSeconds}
+                  onChange={(event) =>
+                    setSettings((currentSettings) => ({
+                      ...currentSettings,
+                      turnSeconds: Math.min(180, Math.max(15, Number(event.target.value) || 15)),
+                    }))
+                  }
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Available letters</span>
+                    <span className="font-semibold text-white">{settings.letterCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Minimum word length</span>
+                    <span className="font-semibold text-white">{settings.minimumWordLength}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Seconds per player</span>
+                    <span className="font-semibold text-white">{settings.turnSeconds}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <button
-              type="button"
-              disabled
-              className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 opacity-60"
-            >
-              Start hosted game
-            </button>
+              {setupError && (
+                <div className="rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                  {setupError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={startHostedMatch}
+                disabled={lobbyPlayers.length < MIN_PLAYERS || !room.roomState?.roomCode}
+                className="w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Start hosted game
+              </button>
+            </div>
           </div>
         </section>
       )}
@@ -775,32 +1378,50 @@ export default function Anagrams() {
             <h2 className="mt-2 text-3xl font-bold">Join a hosted game</h2>
 
             <div className="mt-6 space-y-5">
-              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/80">
-                The cross-device join flow is intentionally not implemented yet, but the same entry
-                points from Trivia are reserved here.
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Player name
+                </label>
+                <input
+                  value={joinName}
+                  onChange={(event) => setJoinName(event.target.value)}
+                  placeholder="Enter your player name"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
               </div>
 
-              <button
-                type="button"
-                disabled
-                className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 opacity-60"
-              >
-                Enter room code
-              </button>
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Room code
+                </label>
+                <input
+                  value={joinHostCode}
+                  onChange={(event) => setJoinHostCode(event.target.value.toUpperCase())}
+                  placeholder="Enter the host's room code"
+                  maxLength={6}
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-center font-mono tracking-[0.35em] text-white uppercase outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              {joinHostCode && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  Room code captured. Join the lobby when you're ready.
+                </div>
+              )}
 
               <button
                 type="button"
-                disabled
-                className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white opacity-60"
+                onClick={generateJoinResponse}
+                className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
               >
-                Generate response code
+                Join lobby
               </button>
 
-              <textarea
-                disabled
-                placeholder="Your response code will appear here in a future update"
-                className="min-h-40 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-blue-50 outline-none placeholder:text-blue-200/45 opacity-60"
-              />
+              {joinStatus && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  {joinStatus}
+                </div>
+              )}
             </div>
           </div>
 
@@ -808,15 +1429,30 @@ export default function Anagrams() {
             <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Lobby preview</p>
             <h2 className="mt-2 text-3xl font-bold">Connected lobby</h2>
 
-            <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
-              <p>
-                For now, switch back to <span className="font-semibold text-white">Local
-                Multiplayer</span> to play the finished same-device version.
-              </p>
+            <div className="mt-6 space-y-4">
+              {lobbyPlayers.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-blue-100/80">
+                  Enter the host's room code, join the lobby, and wait for the match to begin.
+                </p>
+              ) : (
+                lobbyPlayers.map((player, index) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3"
+                  >
+                    <span>
+                      {index + 1}. {player.name}
+                    </span>
+                    <span className="text-xs uppercase tracking-[0.25em] text-cyan-100">
+                      {player.id === HOST_PLAYER_ID ? "Host" : "Player"}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
-              <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Planned settings sync</p>
+              <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Host settings</p>
               <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-between gap-4">
                   <span>Available letters</span>
@@ -832,6 +1468,12 @@ export default function Anagrams() {
                 </div>
               </div>
             </div>
+
+            {setupError && (
+              <div className="mt-6 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {setupError}
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -844,8 +1486,9 @@ export default function Anagrams() {
                 <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Active turn</p>
                 <h2 className="mt-2 text-3xl font-bold">{activePlayer.name}, build as many words as you can</h2>
                 <p className="mt-3 text-blue-100/80">
-                  Every word must use only the shared letters below and meet the minimum length of{" "}
-                  {settings.minimumWordLength}.
+                  {canLocalSubmitWord
+                    ? `Every word must use only the shared letters below and meet the minimum length of ${settings.minimumWordLength}.`
+                    : `Follow along live while ${activePlayer.name} builds words from the shared letter pool.`}
                 </p>
               </div>
 
@@ -878,10 +1521,13 @@ export default function Anagrams() {
                 <input
                   value={currentEntry}
                   onChange={(event) => setCurrentEntry(event.target.value)}
-                  placeholder="Type a word from the shared letters"
+                  placeholder={
+                    canLocalSubmitWord ? "Type a word from the shared letters" : `Waiting for ${activePlayer.name}`
+                  }
                   autoComplete="off"
                   autoCapitalize="none"
                   spellCheck={false}
+                  disabled={!canLocalSubmitWord}
                   className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-4 text-xl text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
                 />
               </div>
@@ -889,14 +1535,16 @@ export default function Anagrams() {
               <div className="flex flex-col gap-3 md:flex-row">
                 <button
                   type="submit"
+                  disabled={!canLocalSubmitWord}
                   className="flex-1 rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30"
                 >
                   Bank word
                 </button>
                 <button
                   type="button"
-                  onClick={advanceTurn}
-                  className="rounded-[1.25rem] border border-white/20 px-5 py-4 text-lg font-semibold text-white transition hover:bg-white/10"
+                  onClick={handleEndTurn}
+                  disabled={!canControlTurn}
+                  className="rounded-[1.25rem] border border-white/20 px-5 py-4 text-lg font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   End turn early
                 </button>
@@ -923,8 +1571,11 @@ export default function Anagrams() {
             <div className="mt-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-400/10 p-5">
               <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Live turn</p>
               <p className="mt-3 text-lg text-white/90">
-                {activePlayer.name} is on the clock. Accepted words stay in submission order and add
-                directly to the scoreboard.
+                {canLocalSubmitWord
+                  ? `${activePlayer.name} is on the clock. Accepted words stay in submission order and add directly to the scoreboard.`
+                  : playMode === "guest"
+                    ? `Waiting for ${activePlayer.name} to finish their turn from another device.`
+                    : `${activePlayer.name} is playing from another device while the host keeps time.`}
               </p>
             </div>
 
@@ -1061,8 +1712,11 @@ export default function Anagrams() {
 
             <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
               <p>
-                Play again to return to setup, keep your current rules, and generate a fresh shared
-                letter pool for the next local match.
+                {playMode === "host"
+                  ? "Play again to return everyone in the room to the hosted lobby, keep this room code, and start another round with fresh letters."
+                  : playMode === "guest"
+                    ? "Stay connected to this room while the host decides whether to start another round."
+                    : "Play again to return to setup, keep your current rules, and generate a fresh shared letter pool for the next local match."}
               </p>
             </div>
 
@@ -1082,10 +1736,11 @@ export default function Anagrams() {
 
             <button
               type="button"
-              onClick={resetForSetup}
-              className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30"
+              onClick={handleReplayAction}
+              disabled={playMode === "guest"}
+              className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Play again
+              {playMode === "guest" ? "Waiting for host" : "Play again"}
             </button>
           </div>
         </section>
