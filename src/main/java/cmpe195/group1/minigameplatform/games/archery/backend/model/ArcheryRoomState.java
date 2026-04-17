@@ -14,6 +14,7 @@ public class ArcheryRoomState {
     private int totalRounds;
     private int arrowsPerRound;
     private double windForce;
+    private ArcheryLastShot lastShot;
     private List<ArcheryRoomPlayer> players = new ArrayList<>();
 
     public String getId() {
@@ -94,6 +95,14 @@ public class ArcheryRoomState {
 
     public void setWindForce(double windForce) {
         this.windForce = windForce;
+    }
+
+    public ArcheryLastShot getLastShot() {
+        return lastShot;
+    }
+
+    public void setLastShot(ArcheryLastShot lastShot) {
+        this.lastShot = lastShot;
     }
 
     public List<ArcheryRoomPlayer> getPlayers() {

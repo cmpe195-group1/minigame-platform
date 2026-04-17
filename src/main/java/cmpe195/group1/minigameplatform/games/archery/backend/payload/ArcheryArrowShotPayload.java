@@ -4,6 +4,8 @@ public class ArcheryArrowShotPayload {
     private String roomId;
     private Integer score;
     private Double dist;
+    private Double impactX;
+    private Double impactY;
 
     public String getRoomId() {
         return roomId;
@@ -27,5 +29,21 @@ public class ArcheryArrowShotPayload {
 
     public void setDist(Double dist) {
         this.dist = dist;
+    }
+
+    public Double getImpactX() {
+        return impactX;
+    }
+
+    public void setImpactX(Double impactX) {
+        this.impactX = impactX;
+    }
+
+    public Double getImpactY() {
+        return impactY;
+    }
+
+    public void setImpactY(Double impactY) {
+        this.impactY = impactY;
     }
 }

@@ -8,6 +8,22 @@ export interface ArrowScore {
   dist: number;
 }
 
+export interface RemoteShotSnapshot {
+  sequence: number;
+  shooterSlot: number;
+  score: number;
+  dist: number;
+  impactX: number;
+  impactY: number;
+}
+
+export interface ArrowShotSubmission {
+  score: number;
+  dist: number;
+  impactX: number;
+  impactY: number;
+}
+
 export interface RoomPlayer {
   id: string;
   name: string;
@@ -29,6 +45,7 @@ export interface RoomSnapshot {
   totalRounds: number;
   arrowsPerRound: number;
   windForce: number;
+  lastShot?: RemoteShotSnapshot | null;
   players: RoomPlayer[];
 }
 
@@ -49,7 +66,7 @@ export interface UseGameSocketReturn {
   joinRoom: (roomId: string, playerName: string) => void;
   setReady: () => void;
   hostStart: () => void;
-  sendArrowShot: (score: number, dist: number) => void;
+  sendArrowShot: (shot: ArrowShotSubmission) => void;
   clearError: () => void;
 }
 
@@ -259,12 +276,18 @@ export function useGameSocket(): UseGameSocketReturn {
     publishJson("/app/archery/start", { roomId: currentRoom.id });
   }, [publishJson]);
 
-  const sendArrowShot = useCallback((score: number, dist: number) => {
+  const sendArrowShot = useCallback((shot: ArrowShotSubmission) => {
     const currentRoom = roomRef.current;
     if (!currentRoom) {
       return;
     }
-    publishJson("/app/archery/arrowShot", { roomId: currentRoom.id, score, dist });
+    publishJson("/app/archery/arrowShot", {
+      roomId: currentRoom.id,
+      score: shot.score,
+      dist: shot.dist,
+      impactX: shot.impactX,
+      impactY: shot.impactY,
+    });
   }, [publishJson]);
 
   const clearError = useCallback(() => setError(null), []);

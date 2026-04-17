@@ -13,7 +13,7 @@
  */
 
 import Phaser from 'phaser';
-import type { RoomSnapshot } from '../../network/useGameSocket';
+import type { ArrowShotSubmission, RemoteShotSnapshot, RoomSnapshot } from '../../network/useGameSocket';
 import { TARGET_RADIUS, SCORE_RINGS, distanceToScore, scoreLabel } from '../../game/ScoreSystem';
 import { dragToVelocity, clampDrag, distance, type Vector2 } from '../../game/Physics';
 
@@ -22,6 +22,16 @@ import { dragToVelocity, clampDrag, distance, type Vector2 } from '../../game/Ph
 export interface SceneInitData {
   mySlot: number;
   room  : RoomSnapshot;
+}
+
+interface RemoteReplayState {
+  shooterSlot: number;
+  score: number;
+  start: Vector2;
+  control: Vector2;
+  end: Vector2;
+  elapsedMs: number;
+  durationMs: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -63,9 +73,12 @@ export default class ArcheryScene extends Phaser.Scene {
   private flyObj      : Phaser.Physics.Arcade.Image | null = null;
   private flyGfx      : Phaser.GameObjects.Graphics | null = null;
   private flyBody     : Phaser.Physics.Arcade.Body | null  = null;
+  private flyingSlot  = 0;
   private isInFlight  = false;
   private isAiming    = false;
   private canShoot    = false;
+  private remoteReplay: RemoteReplayState | null = null;
+  private lastSeenShotSequence = 0;
 
   // Drag state
   private dragStart   : Vector2 = { x: 0, y: 0 };
@@ -80,7 +93,7 @@ export default class ArcheryScene extends Phaser.Scene {
   private turnBanner! : Phaser.GameObjects.Text;
 
   // Callbacks from React
-  private onArrowLanded!: (score: number, dist: number) => void;
+  private onArrowLanded!: (shot: ArrowShotSubmission) => void;
 
   // ── Constructor ──────────────────────────────────────────────────────────────
 
@@ -92,13 +105,15 @@ export default class ArcheryScene extends Phaser.Scene {
     const data = this.registry.get('sceneInitData') as SceneInitData;
     this.mySlot = data.mySlot;
     this.room   = data.room;
+    this.lastSeenShotSequence = data.room.lastShot?.sequence ?? 0;
 
-    const cbs = this.registry.get('callbacks') as { onArrowLanded: (s: number, d: number) => void };
+    const cbs = this.registry.get('callbacks') as { onArrowLanded: (shot: ArrowShotSubmission) => void };
     this.onArrowLanded = cbs.onArrowLanded;
 
     this.isInFlight = false;
     this.isAiming   = false;
     this.canShoot   = false;
+    this.remoteReplay = null;
   }
 
   // ── create ──────────────────────────────────────────────────────────────────
@@ -156,6 +171,8 @@ export default class ArcheryScene extends Phaser.Scene {
   // ── update loop ─────────────────────────────────────────────────────────────
 
   update(_t: number, _dt: number) {
+    this.updateRemoteReplay(_dt);
+
     if (!this.isInFlight || !this.flyObj || !this.flyBody) return;
 
     // Wind nudge
@@ -204,6 +221,14 @@ export default class ArcheryScene extends Phaser.Scene {
 
   private syncFromRoom() {
     const { room, mySlot } = this;
+    const lastShot = room.lastShot;
+    if (lastShot && lastShot.sequence > this.lastSeenShotSequence) {
+      this.lastSeenShotSequence = lastShot.sequence;
+      if (lastShot.shooterSlot !== mySlot) {
+        this.startRemoteReplay(lastShot);
+      }
+    }
+
     this.windForce = room.windForce;
 
     const windDir    = this.windForce > 0 ? '→' : '←';
@@ -215,7 +240,8 @@ export default class ArcheryScene extends Phaser.Scene {
     this.canShoot = (
       room.state === 'playing' &&
       room.currentSlot === mySlot &&
-      !this.isInFlight
+      !this.isInFlight &&
+      this.remoteReplay === null
     );
 
     // Redraw archers
@@ -473,14 +499,18 @@ export default class ArcheryScene extends Phaser.Scene {
   private drawFlyingArrow() {
     if (!this.flyObj || !this.flyBody) return;
 
+    const angle = Math.atan2(this.flyBody.velocity.y, this.flyBody.velocity.x);
+    this.renderFlyingArrow(this.flyObj.x, this.flyObj.y, angle, this.flyingSlot);
+  }
+
+  private renderFlyingArrow(x: number, y: number, angle: number, slot: number) {
     if (!this.flyGfx) this.flyGfx = this.add.graphics().setDepth(15);
 
-    const angle     = Math.atan2(this.flyBody.velocity.y, this.flyBody.velocity.x);
-    const player    = this.room.players[this.mySlot];
+    const player    = this.room.players[slot];
     const colorHex  = Phaser.Display.Color.HexStringToColor(player?.color ?? '#ffffff').color;
 
     this.flyGfx.clear();
-    this.flyGfx.setPosition(this.flyObj.x, this.flyObj.y);
+    this.flyGfx.setPosition(x, y);
     this.flyGfx.setRotation(angle);
 
     this.flyGfx.lineStyle(3, colorHex);
@@ -490,6 +520,13 @@ export default class ArcheryScene extends Phaser.Scene {
     this.flyGfx.fillStyle(0xffffff, 0.85);
     this.flyGfx.fillTriangle(-16, 0, -5, -6, -7, 0);
     this.flyGfx.fillTriangle(-16, 0, -5,  6, -7, 0);
+  }
+
+  private clearFlyingArrow() {
+    if (this.flyGfx) {
+      this.flyGfx.destroy();
+      this.flyGfx = null;
+    }
   }
 
   // ─── Stuck arrow ─────────────────────────────────────────────────────────────
@@ -511,6 +548,111 @@ export default class ArcheryScene extends Phaser.Scene {
   }
 
   // ─── Input handlers ──────────────────────────────────────────────────────────
+
+  private updateRemoteReplay(dt: number) {
+    if (!this.remoteReplay) {
+      return;
+    }
+
+    this.remoteReplay.elapsedMs = Math.min(
+      this.remoteReplay.durationMs,
+      this.remoteReplay.elapsedMs + dt,
+    );
+
+    const t = this.remoteReplay.elapsedMs / this.remoteReplay.durationMs;
+    const point = this.quadraticPoint(
+      this.remoteReplay.start,
+      this.remoteReplay.control,
+      this.remoteReplay.end,
+      t,
+    );
+    const tangent = this.quadraticTangent(
+      this.remoteReplay.start,
+      this.remoteReplay.control,
+      this.remoteReplay.end,
+      t,
+    );
+
+    this.renderFlyingArrow(
+      point.x,
+      point.y,
+      Math.atan2(tangent.y, tangent.x),
+      this.remoteReplay.shooterSlot,
+    );
+
+    if (t >= 1) {
+      this.finishRemoteReplay();
+    }
+  }
+
+  private startRemoteReplay(shot: RemoteShotSnapshot) {
+    const shooterPos = ARCHER_SLOTS[shot.shooterSlot] ?? ARCHER_SLOTS[0];
+    const start = { x: shooterPos.x - 5, y: shooterPos.y - 20 };
+    const end = {
+      x: Phaser.Math.Clamp(shot.impactX, -40, W + 40),
+      y: Phaser.Math.Clamp(shot.impactY, -40, GROUND_Y + 40),
+    };
+    const travelX = Math.max(160, end.x - start.x);
+    const arcHeight = Math.max(60, Math.min(170, travelX * 0.24));
+
+    this.remoteReplay = {
+      shooterSlot: shot.shooterSlot,
+      score: shot.score,
+      start,
+      control: {
+        x: start.x + travelX * 0.52,
+        y: Math.min(start.y, end.y) - arcHeight,
+      },
+      end,
+      elapsedMs: 0,
+      durationMs: 720,
+    };
+
+    this.clearFlyingArrow();
+    this.isAiming = false;
+    this.aimGfx.clear();
+    this.canShoot = false;
+    this.drawAllArchers(0);
+  }
+
+  private finishRemoteReplay() {
+    if (!this.remoteReplay) {
+      return;
+    }
+
+    const replay = this.remoteReplay;
+    this.remoteReplay = null;
+    this.clearFlyingArrow();
+
+    if (replay.score > 0) {
+      this.stickArrow(
+        Phaser.Math.Clamp(replay.end.x, TARGET_X - TARGET_RADIUS, TARGET_X + TARGET_RADIUS),
+        Phaser.Math.Clamp(replay.end.y, TARGET_Y - TARGET_RADIUS, TARGET_Y + TARGET_RADIUS),
+        replay.shooterSlot,
+      );
+    }
+
+    this.spawnParticles(replay.end.x, replay.end.y, replay.score, replay.shooterSlot);
+    this.showPopup(replay.score);
+    this.drawAllArchers(0);
+    this.syncFromRoom();
+  }
+
+  private quadraticPoint(start: Vector2, control: Vector2, end: Vector2, t: number): Vector2 {
+    const u = 1 - t;
+    return {
+      x: (u * u * start.x) + (2 * u * t * control.x) + (t * t * end.x),
+      y: (u * u * start.y) + (2 * u * t * control.y) + (t * t * end.y),
+    };
+  }
+
+  private quadraticTangent(start: Vector2, control: Vector2, end: Vector2, t: number): Vector2 {
+    const u = 1 - t;
+    return {
+      x: (2 * u * (control.x - start.x)) + (2 * t * (end.x - control.x)),
+      y: (2 * u * (control.y - start.y)) + (2 * t * (end.y - control.y)),
+    };
+  }
 
   private onPointerDown(ptr: Phaser.Input.Pointer) {
     if (!this.canShoot || this.isInFlight || this.isAiming) return;
@@ -561,6 +703,7 @@ export default class ArcheryScene extends Phaser.Scene {
 
     this.flyObj    = rect as unknown as Phaser.Physics.Arcade.Image;
     this.flyBody   = body;
+    this.flyingSlot = this.mySlot;
     this.isInFlight = true;
     this.canShoot   = false;
 
@@ -577,30 +720,32 @@ export default class ArcheryScene extends Phaser.Scene {
       this.flyBody.setVelocity(0, 0);
       this.flyBody.setGravityY(0);
     }
-    if (this.flyGfx)  { this.flyGfx.destroy(); this.flyGfx = null; }
+    this.clearFlyingArrow();
     if (this.flyObj)  { this.flyObj.destroy();  this.flyObj  = null; }
     this.flyBody = null;
 
     // Score calculation
     const score = distanceToScore(dist);
+    const impactX = dist <= TARGET_RADIUS + 5
+      ? Phaser.Math.Clamp(hx, TARGET_X - TARGET_RADIUS, TARGET_X + TARGET_RADIUS)
+      : hx;
+    const impactY = dist <= TARGET_RADIUS + 5
+      ? Phaser.Math.Clamp(hy, TARGET_Y - TARGET_RADIUS, TARGET_Y + TARGET_RADIUS)
+      : hy;
 
     // Stick arrow in target
     if (dist <= TARGET_RADIUS + 5) {
-      this.stickArrow(
-        Phaser.Math.Clamp(hx, TARGET_X - TARGET_RADIUS, TARGET_X + TARGET_RADIUS),
-        Phaser.Math.Clamp(hy, TARGET_Y - TARGET_RADIUS, TARGET_Y + TARGET_RADIUS),
-        this.mySlot,
-      );
+      this.stickArrow(impactX, impactY, this.mySlot);
     }
 
     // Particle burst
-    this.spawnParticles(hx, hy, score);
+    this.spawnParticles(impactX, impactY, score, this.mySlot);
 
     // Score popup
     this.showPopup(score);
 
     // Notify React/server (only this device's arrow)
-    this.onArrowLanded(score, dist);
+    this.onArrowLanded({ score, dist, impactX, impactY });
 
     // Redraw archers
     this.drawAllArchers(0);
@@ -626,8 +771,8 @@ export default class ArcheryScene extends Phaser.Scene {
     });
   }
 
-  private spawnParticles(hx: number, hy: number, score: number) {
-    const player   = this.room.players[this.mySlot];
+  private spawnParticles(hx: number, hy: number, score: number, slot: number) {
+    const player   = this.room.players[slot];
     const colorHex = Phaser.Display.Color.HexStringToColor(player?.color ?? '#ffffff').color;
     const count    = score === 10 ? 20 : score > 0 ? 12 : 6;
 

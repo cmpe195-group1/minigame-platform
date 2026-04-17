@@ -10,13 +10,13 @@
 import React, { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import { createPhaserGame, type PhaserCallbacks } from '../phaser/PhaserGame';
-import type { RoomSnapshot } from '../network/useGameSocket';
+import type { ArrowShotSubmission, RoomSnapshot } from '../network/useGameSocket';
 import { LiveScoreBoard } from './ScoreBoard';
 
 interface Props {
   room           : RoomSnapshot;
   mySlot         : number;
-  onArrowShot    : (score: number, dist: number) => void;
+  onArrowShot    : (shot: ArrowShotSubmission) => void;
 }
 
 const GameCanvas: React.FC<Props> = ({ room, mySlot, onArrowShot }) => {
@@ -34,10 +34,10 @@ const GameCanvas: React.FC<Props> = ({ room, mySlot, onArrowShot }) => {
     if (!containerRef.current || gameRef.current) return;
 
     const callbacks: PhaserCallbacks = {
-      onArrowLanded: (score: number, dist: number) => {
+      onArrowLanded: (shot: ArrowShotSubmission) => {
         // Only emit if it's this device's turn
         if (roomRef.current.currentSlot === mySlot) {
-          onArrowShot(score, dist);
+          onArrowShot(shot);
         }
       },
     };

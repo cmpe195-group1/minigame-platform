@@ -6,10 +6,10 @@
 
 import Phaser from 'phaser';
 import ArcheryScene, { type SceneInitData } from './scenes/ArcheryScene';
-import type { RoomSnapshot } from '../network/useGameSocket';
+import type { ArrowShotSubmission, RoomSnapshot } from '../network/useGameSocket';
 
 export interface PhaserCallbacks {
-  onArrowLanded: (score: number, dist: number) => void;
+  onArrowLanded: (shot: ArrowShotSubmission) => void;
 }
 
 export function createPhaserGame(
