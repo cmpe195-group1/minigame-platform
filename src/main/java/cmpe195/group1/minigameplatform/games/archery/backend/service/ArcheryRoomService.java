@@ -1,6 +1,7 @@
 package cmpe195.group1.minigameplatform.games.archery.backend.service;
 
 import cmpe195.group1.minigameplatform.games.archery.backend.model.ArcheryArrowScore;
+import cmpe195.group1.minigameplatform.games.archery.backend.model.ArcheryLastShot;
 import cmpe195.group1.minigameplatform.games.archery.backend.model.ArcheryRoomPlayer;
 import cmpe195.group1.minigameplatform.games.archery.backend.model.ArcheryRoomState;
 import cmpe195.group1.minigameplatform.games.archery.backend.payload.ArcheryArrowShotPayload;
@@ -64,6 +65,7 @@ public class ArcheryRoomService implements SnapshotRoomService<ArcheryRoomState>
         room.setTotalRounds(TOTAL_ROUNDS);
         room.setArrowsPerRound(ARROWS_PER_ROUND);
         room.setWindForce(freshWind());
+        room.setLastShot(null);
         room.setPlayers(new ArrayList<>(List.of(createPlayer(
             clientId,
             resolvePlayerName(payload != null ? payload.resolvePlayerName() : null, 1),
@@ -186,9 +188,20 @@ public class ArcheryRoomService implements SnapshotRoomService<ArcheryRoomState>
 
             int score = Math.max(0, Math.min(10, payload.getScore() != null ? payload.getScore() : 0));
             double dist = Math.max(0, payload.getDist() != null ? payload.getDist() : 0.0);
+            double impactX = payload.getImpactX() != null ? payload.getImpactX() : 0.0;
+            double impactY = payload.getImpactY() != null ? payload.getImpactY() : 0.0;
 
             player.getScores().add(new ArcheryArrowScore(room.getCurrentRound(), score, dist));
             player.setTotal(player.getTotal() + score);
+            int nextShotSequence = room.getLastShot() != null ? room.getLastShot().getSequence() + 1 : 1;
+            room.setLastShot(new ArcheryLastShot(
+                nextShotSequence,
+                player.getSlotIdx(),
+                score,
+                dist,
+                impactX,
+                impactY
+            ));
             room.setArrowsFired(room.getArrowsFired() + 1);
 
             if (room.getArrowsFired() < room.getArrowsPerRound()) {
@@ -262,6 +275,7 @@ public class ArcheryRoomService implements SnapshotRoomService<ArcheryRoomState>
         room.setCurrentRound(1);
         room.setArrowsFired(0);
         room.setWindForce(freshWind());
+        room.setLastShot(null);
 
         for (ArcheryRoomPlayer player : room.getPlayers()) {
             player.setScores(new ArrayList<>());

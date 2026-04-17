@@ -460,7 +460,7 @@ function BattleshipPage() {
 
       MultiplayerManager.setRoomUrl(rid, true);
 
-      const mgr = new MultiplayerManager(rid, !isJoining);
+      const mgr = new MultiplayerManager(rid, !isJoining, isJoining ? -1 : 0, 4);
       setMultiplayerMgr(mgr);
 
       if (isJoining) {
@@ -477,25 +477,20 @@ function BattleshipPage() {
             return;
           }
 
-          if (msg.type === "player_joined" && "playerIndex" in msg) {
-            // We received our player index
-            if (msg.playerIndex !== undefined) {
+          if (msg.type === "player_joined") {
+            setOnlinePlayers4P(msg.currentCount);
+
+            if (mgr.playerIndex === -1) {
               setMyPlayerIndex(msg.playerIndex);
               mgr.playerIndex = msg.playerIndex;
+
+              mgr.send({
+                type: "player_ready",
+                roomId: rid,
+                playerIndex: msg.playerIndex,
+                boardData: myBoard.toData(),
+              });
             }
-            setOnlinePlayers4P(msg.currentCount);
-
-            // Send our board to all
-            mgr.send({
-              type: "player_ready",
-              roomId: rid,
-              playerIndex: msg.playerIndex,
-              boardData: myBoard.toData(),
-            });
-          }
-
-          if (msg.type === "player_joined" && "currentCount" in msg) {
-            setOnlinePlayers4P(msg.currentCount);
           }
 
           if (msg.type === "game_start_4p" && "yourIndex" in msg) {
@@ -537,8 +532,6 @@ function BattleshipPage() {
         myBoard.placeShipsRandomly();
 
         const playerBoards: (Board | null)[] = [myBoard, null, null, null];
-        let playerCount = 1;
-
         mgr.onMessage((msg: MultiplayerMessage) => {
           if (msg.type === "error") {
             setConnectionError(msg.message);
@@ -547,11 +540,13 @@ function BattleshipPage() {
 
           if (msg.type === "player_ready" && "boardData" in msg) {
             const idx = msg.playerIndex;
-            playerBoards[idx] = Board.fromData(msg.boardData);
-            playerCount++;
-            setOnlinePlayers4P(playerCount);
+            if (idx < 1 || idx > 3) return;
 
-            if (playerCount === 4) {
+            playerBoards[idx] = Board.fromData(msg.boardData);
+            const readyCount = playerBoards.filter((board) => board !== null).length;
+            setOnlinePlayers4P(readyCount);
+
+            if (playerBoards.every((board) => board !== null)) {
               // All players ready - start the game
               const logic = new GameLogic("multiplayer_online_4p");
               logic.board1 = playerBoards[0]!;
