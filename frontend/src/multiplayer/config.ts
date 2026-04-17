@@ -8,15 +8,3 @@ export const BACKEND_URL =
       : `https://${raw}`;
 
 export const WS_URL = `${BACKEND_URL.replace(/^http/, "ws")}/ws`;
-
-
-//It should accept a config object like:
-export interface RoomTransportConfig
-{
-  gameKey: string;
-  createDestination: string;
-  joinDestination: string;
-  leaveDestination: string;
-  startDestination?: string;
-  extraDestinations?: Record<string, string>;
-}

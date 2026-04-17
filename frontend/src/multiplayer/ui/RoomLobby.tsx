@@ -1,9 +1,9 @@
 import { useState } from "react";
 //refactor to useStompRoomTransport instead of useWebSocketRoomTransport, for all games instaed of just checkers
-import type { RoomState } from "../transport/types";
+import type { BaseRoomState } from "../transport/types";
 
 interface Props<TGameState> {
-  roomState: RoomState<TGameState>;
+  roomState: BaseRoomState<TGameState>,
   myClientId: string | null;
   onStartGame: () => void;
   onLeave: () => void;

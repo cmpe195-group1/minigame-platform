@@ -1,13 +1,9 @@
 //create a general room setup component for all games, based on checkers' room setup
 import { useState } from "react";   
-import type { RoomTransportConfig } from "../config";
+import type { UseStompRoomTransportConfig } from "../transport/useStompRoomTransport";
 
-interface RoomTransportConfigWithPlayers extends RoomTransportConfig {
-    maxPlayers: number;
-}
-
-interface Props {
-    config: RoomTransportConfigWithPlayers;
+export interface Props {
+    config: UseStompRoomTransportConfig;
     onCreateRoom: (hostName: string) => void;
     onJoinRoom: (roomCode: string, playerName: string) => void;
     onBack: () => void;
@@ -15,7 +11,7 @@ interface Props {
     isConnected?: boolean;
 }
 
-export default function RoomSetup({
+export default function BaseRoomSetup({
     config,
     onCreateRoom,
     onJoinRoom,
@@ -54,9 +50,6 @@ export default function RoomSetup({
                                 className={`px-2 py-0.5 rounded-full ${isConnected ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"}`}
                             >
                                 {isConnected ? "Connected to server" : "Connecting to server…"}
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300">
-                                {config.maxPlayers} Players
                             </span>
                         </div>
                     </div>

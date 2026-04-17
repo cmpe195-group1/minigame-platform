@@ -11,20 +11,15 @@ export interface BaseRoomParticipant {
   clientId: string;
 }
 
-export interface BaseRoomState<TGameState> {
+export interface BaseRoomState<TGameState, TParticipant = BaseRoomParticipant> {
   roomCode: string;
   hostClientId: string;
   maxPlayers: number;
+  participants: TParticipant[];
+  status: "waiting" | "playing" | "finished";
+  transport: "websocket";
+  roomState: TGameState | null
 }
-
-
-// Create general room participant based on checkers and sudoku's room participant, for all games 
-export interface RoomParticipant {
-    playerId: number;
-    name: string;
-    clientId: string;    
-}
-
 
 /* Room particpant specific to a game
 Checkers
@@ -44,17 +39,6 @@ export interface RoomParticipant {
   clientId: string;
 }
 */
-
-// create roomstate that is general for all games, based on checkers and sudoku's room state
-export interface RoomState<TGameState> {
-  roomCode: string;
-  hostClientId: string;
-    maxPlayers: number;
-    participants: RoomParticipant[];
-    status: "waiting" | "playing" | "finished";
-    transport: "websocket";
-    gameState: TGameState | null;
-}
 
 /*
 checkers
