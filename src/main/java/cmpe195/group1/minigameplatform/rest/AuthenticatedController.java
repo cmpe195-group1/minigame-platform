@@ -47,7 +47,7 @@ public class AuthenticatedController {
      * @return the user id and the token passed in
      */
     @GetMapping(path = "/test")
-    public Map<String, String> test(JwtAuthenticationToken token) {
+    public Map<String, String> token(JwtAuthenticationToken token) {
         return Map.of("userId", getUserID(token), "token", token.getToken().getTokenValue());
     }
 
