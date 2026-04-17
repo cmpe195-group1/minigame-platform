@@ -1,138 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
+import { useRoomGame } from "./room/useRoomGame"
+import type { RoomState as TriviaRoomState } from "./room/RoomTypes"
+import {
+  DEFAULT_SETTINGS,
+  HOST_PLAYER_ID,
+  type ActiveQuestion,
+  type BroadcastGameState,
+  type GameSettings,
+  type LobbyPlayer,
+  type OpenTdbCategoryResponse,
+  type OpenTdbQuestionResponse,
+  type Phase,
+  type PlayerRecord,
+  type RevealState,
+  type TriviaCategory,
+} from "./types"
 
-type Phase = "setup" | "loading" | "question" | "reveal" | "results"
 type SetupMode = "local" | "host" | "join"
 type PlayMode = "local" | "host" | "guest"
-
-type NetworkMessage =
-  | {
-      type: "join-request"
-      playerName: string
-    }
-  | {
-      type: "submit-answer"
-      answer: string | null
-      timedOut: boolean
-    }
-  | {
-      type: "lobby-sync"
-      players: LobbyPlayer[]
-      settings: GameSettings
-      yourPlayerId: string
-      hostName: string
-    }
-  | {
-      type: "state-sync"
-      state: BroadcastGameState
-      yourPlayerId: string
-    }
-  | {
-      type: "system"
-      message: string
-    }
-
-interface TriviaCategory {
-  id: number
-  name: string
-}
-
-interface GameSettings {
-  category: string
-  difficulty: string
-  type: string
-  questionsPerPlayer: number
-  autoContinueAfterReveal: boolean
-}
-
-interface PlayerRecord {
-  id: string
-  name: string
-  score: number
-  answered: number
-}
-
-interface LobbyPlayer {
-  id: string
-  name: string
-}
-
-interface ActiveQuestion {
-  category: string
-  difficulty: string
-  type: string
-  prompt: string
-  correctAnswer: string
-  answers: string[]
-}
-
-interface RevealState {
-  selectedAnswer: string | null
-  correct: boolean
-  timedOut: boolean
-}
-
-interface BroadcastGameState {
-  phase: Phase
-  players: PlayerRecord[]
-  currentTurn: number
-  activeQuestion: ActiveQuestion | null
-  revealState: RevealState | null
-  secondsLeft: number
-  settings: GameSettings
-  gameError: string
-  autoContinueRemainingMs: number
-}
-
-interface OpenTdbQuestion {
-  category: string
-  type: string
-  difficulty: string
-  question: string
-  correct_answer: string
-  incorrect_answers: string[]
-}
-
-interface OpenTdbQuestionResponse {
-  response_code: number
-  results: OpenTdbQuestion[]
-}
-
-interface OpenTdbCategoryResponse {
-  trivia_categories: TriviaCategory[]
-}
-
-interface HostConnectionRecord {
-  playerId: string
-  playerName: string
-  peer: RTCPeerConnection
-  channel: RTCDataChannel
-}
-
-interface PendingInvite {
-  playerId: string
-  peer: RTCPeerConnection
-  channel: RTCDataChannel
-}
-
-interface GuestConnectionRecord {
-  peer: RTCPeerConnection
-  channel: RTCDataChannel | null
-}
 
 const TURN_SECONDS = 30
 const API_COOLDOWN_MS = 5000
 const REVEAL_AUTO_CONTINUE_MS = 10000
 const MIN_PLAYERS = 2
 const MAX_PLAYERS = 6
-const HOST_PLAYER_ID = "host-player"
-const DEFAULT_SETTINGS: GameSettings = {
-  category: "",
-  difficulty: "",
-  type: "",
-  questionsPerPlayer: 5,
-  autoContinueAfterReveal: false,
-}
-
 function decodeHtml(value: string) {
   const textarea = document.createElement("textarea")
   textarea.innerHTML = value
@@ -183,53 +74,19 @@ function getPlacementLabel(position: number) {
   return `${position}th`
 }
 
-function createPeerId(prefix: string) {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `${prefix}-${crypto.randomUUID()}`
-  }
-
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function encodeSignalPayload(description: RTCSessionDescriptionInit) {
-  return btoa(JSON.stringify(description))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "")
-}
-
-function decodeSignalPayload(payload: string) {
-  const normalized = payload.trim().replace(/-/g, "+").replace(/_/g, "/")
-  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4))
-  return JSON.parse(atob(`${normalized}${padding}`)) as RTCSessionDescriptionInit
-}
-
-function waitForIceGatheringComplete(peer: RTCPeerConnection) {
-  if (peer.iceGatheringState === "complete") {
-    return Promise.resolve()
-  }
-
-  return new Promise<void>((resolve) => {
-    const handleStateChange = () => {
-      if (peer.iceGatheringState === "complete") {
-        peer.removeEventListener("icegatheringstatechange", handleStateChange)
-        resolve()
-      }
-    }
-
-    peer.addEventListener("icegatheringstatechange", handleStateChange)
-  })
-}
-
-function sendChannelMessage(channel: RTCDataChannel, message: NetworkMessage) {
-  if (channel.readyState !== "open") {
-    return
-  }
-
-  channel.send(JSON.stringify(message))
+function areSettingsEqual(left: GameSettings, right: GameSettings) {
+  return (
+    left.category === right.category &&
+    left.difficulty === right.difficulty &&
+    left.type === right.type &&
+    left.questionsPerPlayer === right.questionsPerPlayer &&
+    left.autoContinueAfterReveal === right.autoContinueAfterReveal
+  )
 }
 
 export default function Trivia() {
+  const room = useRoomGame()
+
   const [setupMode, setSetupMode] = useState<SetupMode>("local")
   const [playMode, setPlayMode] = useState<PlayMode>("local")
   const [phase, setPhase] = useState<Phase>("setup")
@@ -237,9 +94,6 @@ export default function Trivia() {
   const [hostName, setHostName] = useState("")
   const [joinName, setJoinName] = useState("")
   const [joinHostCode, setJoinHostCode] = useState("")
-  const [joinResponseCode, setJoinResponseCode] = useState("")
-  const [hostInviteCode, setHostInviteCode] = useState("")
-  const [hostAnswerCode, setHostAnswerCode] = useState("")
   const [hostStatus, setHostStatus] = useState("")
   const [joinStatus, setJoinStatus] = useState("")
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([])
@@ -264,13 +118,8 @@ export default function Trivia() {
   const requestIdRef = useRef(0)
   const lastApiCallAtRef = useRef(0)
   const cooldownWaitIdRef = useRef(0)
-  const pendingInviteRef = useRef<PendingInvite | null>(null)
-  const hostConnectionsRef = useRef<Map<string, HostConnectionRecord>>(new Map())
-  const guestConnectionRef = useRef<GuestConnectionRecord | null>(null)
+  const lastHandledPendingAnswerIdRef = useRef<number | null>(null)
   const submitAnswerRef = useRef<(selectedAnswer: string | null, timedOut?: boolean) => void>(() => undefined)
-  const hostNameRef = useRef(hostName)
-  const joinNameRef = useRef(joinName)
-  const settingsRef = useRef(settings)
   const phaseRef = useRef(phase)
   const currentTurnRef = useRef(currentTurn)
   const playersRef = useRef(players)
@@ -310,147 +159,13 @@ export default function Trivia() {
   }, [leaderboard])
 
   useEffect(() => {
-    hostNameRef.current = hostName
-    joinNameRef.current = joinName
-    settingsRef.current = settings
     phaseRef.current = phase
     currentTurnRef.current = currentTurn
     playersRef.current = players
     playModeRef.current = playMode
     answerLockedRef.current = answerLocked
     localPlayerIdRef.current = localPlayerId
-  }, [hostName, joinName, settings, phase, currentTurn, players, playMode, answerLocked, localPlayerId])
-
-  const closePendingInvite = useCallback(() => {
-    const pendingInvite = pendingInviteRef.current
-
-    if (!pendingInvite) {
-      return
-    }
-
-    try {
-      pendingInvite.channel.close()
-    } catch {
-      // no-op
-    }
-
-    try {
-      pendingInvite.peer.close()
-    } catch {
-      // no-op
-    }
-
-    pendingInviteRef.current = null
-  }, [])
-
-  const closeAllConnections = useCallback(() => {
-    closePendingInvite()
-
-    hostConnectionsRef.current.forEach((connection) => {
-      try {
-        connection.channel.close()
-      } catch {
-        // no-op
-      }
-
-      try {
-        connection.peer.close()
-      } catch {
-        // no-op
-      }
-    })
-
-    hostConnectionsRef.current.clear()
-
-    if (guestConnectionRef.current) {
-      try {
-        guestConnectionRef.current.channel?.close()
-      } catch {
-        // no-op
-      }
-
-      try {
-        guestConnectionRef.current.peer.close()
-      } catch {
-        // no-op
-      }
-
-      guestConnectionRef.current = null
-    }
-  }, [closePendingInvite])
-
-  useEffect(() => {
-    return () => closeAllConnections()
-  }, [closeAllConnections])
-
-  const syncHostLobbyPlayers = useCallback(() => {
-    const hostPlayer: LobbyPlayer = {
-      id: HOST_PLAYER_ID,
-      name: hostNameRef.current.trim() || "Host",
-    }
-
-    const remotePlayers = [...hostConnectionsRef.current.values()]
-      .filter((connection) => connection.playerName.trim())
-      .map((connection) => ({
-        id: connection.playerId,
-        name: connection.playerName,
-      }))
-
-    const nextLobbyPlayers = [hostPlayer, ...remotePlayers]
-    setLobbyPlayers(nextLobbyPlayers)
-    return nextLobbyPlayers
-  }, [])
-
-  const broadcastLobbySync = useCallback(
-    (explicitPlayers?: LobbyPlayer[]) => {
-      const playersToShare = explicitPlayers ?? syncHostLobbyPlayers()
-
-      hostConnectionsRef.current.forEach((connection) => {
-        sendChannelMessage(connection.channel, {
-          type: "lobby-sync",
-          players: playersToShare,
-          settings: settingsRef.current,
-          yourPlayerId: connection.playerId,
-          hostName: hostNameRef.current.trim() || "Host",
-        })
-      })
-    },
-    [syncHostLobbyPlayers],
-  )
-
-  const removeHostConnection = useCallback(
-    (playerId: string, statusMessage?: string) => {
-      const existingConnection = hostConnectionsRef.current.get(playerId)
-
-      if (existingConnection) {
-        try {
-          existingConnection.channel.close()
-        } catch {
-          // no-op
-        }
-
-        try {
-          existingConnection.peer.close()
-        } catch {
-          // no-op
-        }
-
-        hostConnectionsRef.current.delete(playerId)
-      }
-
-      if (pendingInviteRef.current?.playerId === playerId) {
-        closePendingInvite()
-      }
-
-      const nextLobbyPlayers = syncHostLobbyPlayers()
-      broadcastLobbySync(nextLobbyPlayers)
-
-      if (statusMessage) {
-        setHostStatus(statusMessage)
-      }
-    },
-    [broadcastLobbySync, closePendingInvite, syncHostLobbyPlayers],
-  )
+  }, [phase, currentTurn, players, playMode, answerLocked, localPlayerId])
 
   const submitAnswer = useCallback(
     (selectedAnswer: string | null, timedOut = false) => {
@@ -484,80 +199,15 @@ export default function Trivia() {
     submitAnswerRef.current = submitAnswer
   }, [submitAnswer])
 
-  const handleHostNetworkMessage = useCallback(
-    (playerId: string, rawMessage: string) => {
-      let message: NetworkMessage
-
-      try {
-        message = JSON.parse(rawMessage) as NetworkMessage
-      } catch {
-        return
-      }
-
-      if (message.type === "join-request") {
-        const existingConnection = hostConnectionsRef.current.get(playerId)
-
-        if (!existingConnection) {
-          return
-        }
-
-        existingConnection.playerName = message.playerName.trim() || "Guest"
-        const nextLobbyPlayers = syncHostLobbyPlayers()
-        broadcastLobbySync(nextLobbyPlayers)
-        setHostStatus(`${existingConnection.playerName} joined the lobby.`)
-        return
-      }
-
-      if (message.type === "submit-answer") {
-        const currentPlayers = playersRef.current
-        const activeIndex = currentPlayers.length ? currentTurnRef.current % currentPlayers.length : 0
-        const currentActivePlayer = currentPlayers[activeIndex] ?? null
-
-        if (
-          playModeRef.current !== "host" ||
-          phaseRef.current !== "question" ||
-          answerLockedRef.current ||
-          !currentActivePlayer ||
-          currentActivePlayer.id !== playerId
-        ) {
-          return
-        }
-
-        submitAnswerRef.current(message.answer, message.timedOut)
-      }
-    },
-    [broadcastLobbySync, syncHostLobbyPlayers],
-  )
-
-  const handleGuestNetworkMessage = useCallback((rawMessage: string) => {
-    let message: NetworkMessage
-
-    try {
-      message = JSON.parse(rawMessage) as NetworkMessage
-    } catch {
-      return
-    }
-
-    if (message.type === "lobby-sync") {
-      setSetupMode("join")
-      setPlayMode("guest")
-      setSettings(message.settings)
-      setLobbyPlayers(message.players)
-      setLocalPlayerId(message.yourPlayerId)
-      setJoinStatus(`Connected to ${message.hostName}'s lobby. Waiting for the host to start.`)
-      return
-    }
-
-    if (message.type === "state-sync") {
-      const nextState = message.state
+  const applyGuestGameState = useCallback(
+    (nextState: BroadcastGameState, yourPlayerId: string | null, roomState?: TriviaRoomState | null) => {
       const nextActivePlayer = nextState.players.length
         ? nextState.players[nextState.currentTurn % nextState.players.length]
         : null
 
       setPlayMode("guest")
-      setLocalPlayerId(message.yourPlayerId)
+      setLocalPlayerId(yourPlayerId)
       setPlayers(nextState.players)
-      setLobbyPlayers(nextState.players.map((player) => ({ id: player.id, name: player.name })))
       setPhase(nextState.phase)
       setCurrentTurn(nextState.currentTurn)
       setActiveQuestion(nextState.activeQuestion)
@@ -569,76 +219,159 @@ export default function Trivia() {
 
       if (
         nextState.phase !== "question" ||
-        nextActivePlayer?.id !== message.yourPlayerId ||
+        nextActivePlayer?.id !== yourPlayerId ||
         nextState.currentTurn !== currentTurnRef.current
       ) {
         setAnswerLocked(false)
       }
 
-      if (nextState.phase === "results") {
+      if (roomState?.systemMessage) {
+        setJoinStatus(roomState.systemMessage)
+      } else if (nextState.phase === "results") {
         setJoinStatus("Match complete.")
       } else if (nextState.phase === "reveal") {
         setJoinStatus("Answer revealed.")
       } else if (nextState.phase === "question") {
         setJoinStatus(
-          nextActivePlayer?.id === message.yourPlayerId
+          nextActivePlayer?.id === yourPlayerId
             ? "It is your turn to answer."
             : `Waiting for ${nextActivePlayer?.name ?? "the next player"}.`,
         )
       } else {
         setJoinStatus("Connected to the live match.")
       }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!room.joinError) {
       return
     }
 
-    if (message.type === "system") {
-      setJoinStatus(message.message)
+    setSetupError(room.joinError)
+
+    if (setupMode === "join") {
+      setJoinStatus(room.joinError)
     }
-  }, [])
 
-  const attachHostConnectionEvents = useCallback(
-    (playerId: string, peer: RTCPeerConnection, channel: RTCDataChannel) => {
-      channel.onopen = () => {
-        pendingInviteRef.current = null
-        hostConnectionsRef.current.set(playerId, {
-          playerId,
-          playerName: "",
-          peer,
-          channel,
-        })
-        setHostInviteCode("")
-        setHostAnswerCode("")
-        setHostStatus("A guest connected. Waiting for their player name...")
+    if (setupMode === "host") {
+      setHostStatus(room.joinError)
+    }
+  }, [room.joinError, setupMode])
+
+  useEffect(() => {
+    if (setupMode !== "host" || phase !== "setup") {
+      return
+    }
+
+    if (room.roomState) {
+      setLobbyPlayers(room.roomState.participants.map((player) => ({ id: player.playerId, name: player.name })))
+      return
+    }
+
+    const trimmedHostName = hostName.trim()
+    setLobbyPlayers(trimmedHostName ? [{ id: HOST_PLAYER_ID, name: trimmedHostName }] : [])
+  }, [setupMode, phase, hostName, room.roomState])
+
+  useEffect(() => {
+    const roomState = room.roomState
+
+    if (!roomState) {
+      return
+    }
+
+    const nextLobbyPlayers = roomState.participants.map((player) => ({
+      id: player.playerId,
+      name: player.name,
+    }))
+
+    setLobbyPlayers(nextLobbyPlayers)
+
+    if (room.role === "host") {
+      setPlayMode("host")
+      setLocalPlayerId(HOST_PLAYER_ID)
+      if (phase === "setup") {
+        setHostStatus("Room code ready. Share it with guests so they can join your lobby.")
+        setSettings((currentSettings) =>
+          areSettingsEqual(currentSettings, roomState.settings) ? currentSettings : roomState.settings,
+        )
       }
+      return
+    }
 
-      channel.onmessage = (event) => {
-        handleHostNetworkMessage(playerId, String(event.data))
-      }
+    if (room.role !== "guest") {
+      return
+    }
 
-      channel.onclose = () => {
-        if (hostConnectionsRef.current.has(playerId)) {
-          removeHostConnection(playerId, "A guest disconnected from the lobby.")
-        }
-      }
+    setSettings((currentSettings) =>
+      areSettingsEqual(currentSettings, roomState.settings) ? currentSettings : roomState.settings,
+    )
 
-      peer.onconnectionstatechange = () => {
-        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
-          if (hostConnectionsRef.current.has(playerId)) {
-            removeHostConnection(playerId, "A guest disconnected from the lobby.")
-            return
-          }
+    const yourParticipant = roomState.participants.find((player) => player.clientId === room.myClientId) ?? null
+    const yourPlayerId = yourParticipant?.playerId ?? null
 
-          if (pendingInviteRef.current?.playerId === playerId) {
-            closePendingInvite()
-            setHostInviteCode("")
-            setHostAnswerCode("")
-            setHostStatus("The pending invite disconnected before it completed.")
-          }
-        }
-      }
-    },
-    [closePendingInvite, handleHostNetworkMessage, removeHostConnection],
-  )
+    setSetupMode("join")
+    setPlayMode("guest")
+    setLocalPlayerId(yourPlayerId)
+
+    if (roomState.gameState) {
+      applyGuestGameState(roomState.gameState, yourPlayerId, roomState)
+      return
+    }
+
+    setPhase("setup")
+    setPlayers([])
+    setCurrentTurn(0)
+    setActiveQuestion(null)
+    setRevealState(null)
+    setSecondsLeft(TURN_SECONDS)
+    setGameError("")
+    setAnswerLocked(false)
+    setAutoContinueRemainingMs(0)
+    setJoinStatus(
+      roomState.systemMessage ??
+        `Connected to ${(nextLobbyPlayers.find((player) => player.id === HOST_PLAYER_ID)?.name ?? "the host")}'s lobby. Waiting for the host to start.`,
+    )
+  }, [applyGuestGameState, phase, room.myClientId, room.role, room.roomState])
+
+  useEffect(() => {
+    if (setupMode !== "host" || phase !== "setup" || room.role !== "host" || !room.roomState?.roomCode) {
+      return
+    }
+
+    room.updateSettings(settings)
+  }, [phase, room.role, room.roomState?.roomCode, room.updateSettings, settings, setupMode])
+
+  useEffect(() => {
+    if (room.role !== "host") {
+      return
+    }
+
+    const pendingAnswer = room.roomState?.pendingAnswer
+
+    if (!pendingAnswer || lastHandledPendingAnswerIdRef.current === pendingAnswer.submissionId) {
+      return
+    }
+
+    lastHandledPendingAnswerIdRef.current = pendingAnswer.submissionId
+
+    const currentPlayers = playersRef.current
+    const activeIndex = currentPlayers.length ? currentTurnRef.current % currentPlayers.length : 0
+    const currentActivePlayer = currentPlayers[activeIndex] ?? null
+
+    if (
+      playModeRef.current !== "host" ||
+      phaseRef.current !== "question" ||
+      answerLockedRef.current ||
+      !currentActivePlayer ||
+      currentActivePlayer.id !== pendingAnswer.playerId
+    ) {
+      return
+    }
+
+    submitAnswerRef.current(pendingAnswer.answer, pendingAnswer.timedOut)
+  }, [room.role, room.roomState?.pendingAnswer])
 
   const waitForApiCooldown = useCallback(
     async (kind: "categories" | "question", signal: AbortSignal) => {
@@ -826,18 +559,18 @@ export default function Trivia() {
 
   const resetNetworkState = useCallback(
     (nextMode?: SetupMode) => {
-      closeAllConnections()
+      if (room.role !== "none") {
+        room.leaveRoom()
+      }
+
       setPlayMode(nextMode === "join" ? "guest" : "local")
       setLocalPlayerId(null)
       setLobbyPlayers([])
-      setHostInviteCode("")
-      setHostAnswerCode("")
       setHostStatus("")
       setJoinHostCode("")
-      setJoinResponseCode("")
       setJoinStatus("")
     },
-    [closeAllConnections],
+    [room],
   )
 
   const resetMatch = useCallback(() => {
@@ -907,6 +640,11 @@ export default function Trivia() {
 
     if (lobbyPlayers.length < 2) {
       setSetupError("At least one guest must join the lobby before the hosted match can start.")
+      return
+    }
+
+    if (!room.roomState?.roomCode) {
+      setSetupError("Generate a room code before starting the hosted match.")
       return
     }
 
@@ -997,14 +735,7 @@ export default function Trivia() {
   }, [phase, settings.autoContinueAfterReveal, playMode, continueAfterReveal])
 
   useEffect(() => {
-    if (setupMode === "host" && phase === "setup") {
-      const nextLobbyPlayers = syncHostLobbyPlayers()
-      broadcastLobbySync(nextLobbyPlayers)
-    }
-  }, [setupMode, phase, hostName, settings, syncHostLobbyPlayers, broadcastLobbySync])
-
-  useEffect(() => {
-    if (playMode !== "host" || phase === "setup" || players.length === 0) {
+    if (playMode !== "host" || phase === "setup" || players.length === 0 || room.role !== "host" || !room.roomState?.roomCode) {
       return
     }
 
@@ -1020,14 +751,8 @@ export default function Trivia() {
       autoContinueRemainingMs,
     }
 
-    hostConnectionsRef.current.forEach((connection) => {
-      sendChannelMessage(connection.channel, {
-        type: "state-sync",
-        state: snapshot,
-        yourPlayerId: connection.playerId,
-      })
-    })
-  }, [playMode, phase, players, currentTurn, activeQuestion, revealState, secondsLeft, settings, gameError, autoContinueRemainingMs])
+    room.publishState(snapshot)
+  }, [playMode, phase, players, currentTurn, activeQuestion, revealState, secondsLeft, settings, gameError, autoContinueRemainingMs, room.role, room.roomState?.roomCode, room.publishState])
 
   const handleNameChange = (index: number, event: ChangeEvent<HTMLInputElement>) => {
     const nextNames = [...playerNames]
@@ -1069,7 +794,7 @@ export default function Trivia() {
     setAutoContinueRemainingMs(0)
   }
 
-  const createHostInvite = async () => {
+  const createHostInvite = () => {
     const trimmedHostName = hostName.trim()
 
     if (!trimmedHostName) {
@@ -1078,69 +803,18 @@ export default function Trivia() {
     }
 
     setSetupError("")
-    closePendingInvite()
+    setPlayMode("host")
+    setLocalPlayerId(HOST_PLAYER_ID)
 
-    try {
-      const playerId = createPeerId("guest")
-      const peer = new RTCPeerConnection({ iceServers: [] })
-      const channel = peer.createDataChannel("trivia")
-
-      attachHostConnectionEvents(playerId, peer, channel)
-
-      const offer = await peer.createOffer()
-      await peer.setLocalDescription(offer)
-      await waitForIceGatheringComplete(peer)
-
-      pendingInviteRef.current = {
-        playerId,
-        peer,
-        channel,
-      }
-      setHostInviteCode(encodeSignalPayload(peer.localDescription ?? offer))
-      setHostStatus("Invite code ready. Share it with a guest, then paste their response code below.")
-    } catch {
-      closePendingInvite()
-      setSetupError("Could not create a host invite code in this browser.")
+    if (room.role !== "none") {
+      room.leaveRoom()
     }
+
+    room.createRoom(trimmedHostName, MAX_PLAYERS)
+    setHostStatus("Creating room code...")
   }
 
-  const applyGuestResponseCode = async () => {
-    const pendingInvite = pendingInviteRef.current
-    const candidateCode = hostAnswerCode.trim() || window.prompt("Paste the guest response code:", "")?.trim() || ""
-
-    if (!pendingInvite) {
-      setSetupError("Generate a host invite code before applying a guest response.")
-      return
-    }
-
-    if (!candidateCode) {
-      return
-    }
-
-    try {
-      await pendingInvite.peer.setRemoteDescription(decodeSignalPayload(candidateCode))
-      setHostAnswerCode("")
-      setHostInviteCode("")
-      setHostStatus("Guest response accepted. Finalizing the peer connection...")
-      setSetupError("")
-    } catch {
-      setSetupError("That guest response code could not be read. Double-check and try again.")
-    }
-  }
-
-  const promptForHostCode = () => {
-    const input = window.prompt("Paste the room code to join this trivia game:", joinHostCode)
-
-    if (input === null) {
-      return
-    }
-
-    setJoinHostCode(input.trim())
-    setJoinStatus(input.trim() ? "Room code added. Generate your response code next." : "")
-    setSetupError("")
-  }
-
-  const generateJoinResponse = async () => {
+  const generateJoinResponse = () => {
     const trimmedJoinName = joinName.trim()
 
     if (!trimmedJoinName) {
@@ -1155,58 +829,12 @@ export default function Trivia() {
 
     setSetupError("")
 
-    if (guestConnectionRef.current) {
-      closeAllConnections()
-      guestConnectionRef.current = null
+    if (room.role !== "none") {
+      room.leaveRoom()
     }
 
-    try {
-      const peer = new RTCPeerConnection({ iceServers: [] })
-      guestConnectionRef.current = {
-        peer,
-        channel: null,
-      }
-
-      peer.ondatachannel = (event) => {
-        const channel = event.channel
-        guestConnectionRef.current = {
-          peer,
-          channel,
-        }
-
-        channel.onopen = () => {
-          setJoinStatus("Connected to the host. Joining the lobby...")
-          sendChannelMessage(channel, {
-            type: "join-request",
-            playerName: joinNameRef.current.trim() || "Guest",
-          })
-        }
-
-        channel.onmessage = (messageEvent) => {
-          handleGuestNetworkMessage(String(messageEvent.data))
-        }
-
-        channel.onclose = () => {
-          setJoinStatus("The host connection closed.")
-        }
-      }
-
-      peer.onconnectionstatechange = () => {
-        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
-          setJoinStatus("The host connection closed.")
-        }
-      }
-
-      await peer.setRemoteDescription(decodeSignalPayload(joinHostCode))
-      const answer = await peer.createAnswer()
-      await peer.setLocalDescription(answer)
-      await waitForIceGatheringComplete(peer)
-
-      setJoinResponseCode(encodeSignalPayload(peer.localDescription ?? answer))
-      setJoinStatus("Response code ready. Send it back to the host and wait for them to start the game.")
-    } catch {
-      setSetupError("That room code could not be used. Double-check it and try again.")
-    }
+    room.joinRoom(joinHostCode, trimmedJoinName)
+    setJoinStatus("Joining the host lobby...")
   }
 
   const handleAnswerChoice = (answer: string) => {
@@ -1215,17 +843,11 @@ export default function Trivia() {
     }
 
     if (playMode === "guest") {
-      const guestChannel = guestConnectionRef.current?.channel
-
-      if (!guestChannel || guestChannel.readyState !== "open" || activePlayer.id !== localPlayerId) {
+      if (activePlayer.id !== localPlayerId) {
         return
       }
 
-      sendChannelMessage(guestChannel, {
-        type: "submit-answer",
-        answer,
-        timedOut: false,
-      })
+      room.submitAnswer(answer, false)
       setAnswerLocked(true)
       return
     }
@@ -1256,12 +878,12 @@ export default function Trivia() {
     {
       id: "host" as const,
       title: "Host a Game",
-      description: "Create a cross-device lobby and invite players with a room code.",
+      description: "Create a cross-device lobby and invite players with a single room code.",
     },
     {
       id: "join" as const,
       title: "Join a Game",
-      description: "Paste a room code, return your response code, and play from another device.",
+      description: "Enter a room code and play from another device.",
     },
   ]
 
@@ -1273,8 +895,8 @@ export default function Trivia() {
             <p className="text-sm uppercase tracking-[0.5em] text-cyan-300">Trivia Showdown</p>
             <h1 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">Quiz Night</h1>
             <p className="mt-4 max-w-3xl text-base text-blue-100/85 md:text-lg">
-              Build your own game-show table, host a no-server lobby across devices, or join a
-              match with a manual room code exchange.
+              Build your own game-show table, host a shared lobby across devices, or join a match
+              with a simple room code.
             </p>
           </div>
 
@@ -1292,7 +914,7 @@ export default function Trivia() {
             <div>
               <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Connection</p>
               <p className="mt-2 text-lg font-semibold">
-                {setupMode === "local" ? "Same device" : "WebRTC manual code exchange"}
+                {setupMode === "local" ? "Same device" : "Shared WebSocket room code"}
               </p>
             </div>
           </div>
@@ -1615,7 +1237,7 @@ export default function Trivia() {
                   <div>
                     <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Connected players</p>
                     <p className="mt-2 text-blue-100/75">
-                      Share a room code, then paste each guest's response code to add them.
+                      Generate a room code, share it with your guests, and wait for them to join.
                     </p>
                   </div>
                   <div className="rounded-full bg-yellow-300 px-4 py-2 text-sm font-black text-blue-950">
@@ -1650,31 +1272,16 @@ export default function Trivia() {
                   onClick={createHostInvite}
                   className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
                 >
-                  Generate room code
+                  {room.roomState?.roomCode ? "Generate new room code" : "Generate room code"}
                 </button>
 
-                {hostInviteCode && (
+                {room.roomState?.roomCode && (
                   <textarea
                     readOnly
-                    value={hostInviteCode}
+                    value={room.roomState.roomCode}
                     className="min-h-36 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-blue-50 outline-none"
                   />
                 )}
-
-                <textarea
-                  value={hostAnswerCode}
-                  onChange={(event) => setHostAnswerCode(event.target.value)}
-                  placeholder="Paste a guest response code here"
-                  className="min-h-28 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
-                />
-
-                <button
-                  type="button"
-                  onClick={applyGuestResponseCode}
-                  className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
-                >
-                  Apply guest response code
-                </button>
               </div>
 
               {hostStatus && (
@@ -1835,17 +1442,22 @@ export default function Trivia() {
                 />
               </div>
 
-              <button
-                type="button"
-                onClick={promptForHostCode}
-                className="rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
-              >
-                {joinHostCode ? "Change room code" : "Enter room code"}
-              </button>
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Room code
+                </label>
+                <input
+                  value={joinHostCode}
+                  onChange={(event) => setJoinHostCode(event.target.value.toUpperCase())}
+                  placeholder="Enter the host's room code"
+                  maxLength={6}
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-center font-mono tracking-[0.35em] text-white uppercase outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
 
               {joinHostCode && (
                 <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
-                  Room code captured. Generate your response code to continue.
+                  Room code captured. Join the lobby when you're ready.
                 </div>
               )}
 
@@ -1854,16 +1466,8 @@ export default function Trivia() {
                 onClick={generateJoinResponse}
                 className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
               >
-                Generate response code
+                Join lobby
               </button>
-
-              {joinResponseCode && (
-                <textarea
-                  readOnly
-                  value={joinResponseCode}
-                  className="min-h-40 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-blue-50 outline-none"
-                />
-              )}
 
               {joinStatus && (
                 <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
@@ -1880,7 +1484,7 @@ export default function Trivia() {
             <div className="mt-6 space-y-4">
               {lobbyPlayers.length === 0 ? (
                 <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-blue-100/80">
-                  Paste a room code, generate your response code, and wait for the host to confirm.
+                  Enter the host's room code, join the lobby, and wait for the match to begin.
                 </p>
               ) : (
                 lobbyPlayers.map((player, index) => (
