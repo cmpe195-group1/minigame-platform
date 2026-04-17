@@ -1,7 +1,9 @@
 package cmpe195.group1.minigameplatform.games.battleship.backend.websocket;
 
 import cmpe195.group1.minigameplatform.games.battleship.backend.service.BattleshipRoomService;
-import cmpe195.group1.minigameplatform.games.sudoku.backend.websocket.StompSessionRegistry;
+import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
+import cmpe195.group1.minigameplatform.multiplayer.websocket.RoomTopics;
+import cmpe195.group1.minigameplatform.multiplayer.websocket.StompSessionRegistry;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -10,12 +12,11 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 @Controller
 public class BattleshipStompController {
-    private static final String SESSION_SCOPE = "battleship";
+    private static final String GAME_KEY = "battleship";
 
     private final BattleshipRoomService roomService;
     private final SimpMessagingTemplate messagingTemplate;
@@ -99,7 +100,7 @@ public class BattleshipStompController {
 
     private void sendToClient(String clientToken, Map<String, Object> message) {
         Object payload = message;
-        messagingTemplate.convertAndSend("/topic/battleship/client/" + clientToken, payload);
+        messagingTemplate.convertAndSend(RoomTopics.clientTopic(GAME_KEY, clientToken), payload);
     }
 
     private String stringValue(Map<String, Object> payload, String key) {
@@ -111,9 +112,6 @@ public class BattleshipStompController {
     }
 
     private String normalizeRoomId(String roomId) {
-        if (roomId == null) {
-            return "";
-        }
-        return roomId.trim().toUpperCase(Locale.ROOT);
+        return RoomCodeUtils.normalize(roomId);
     }
 }

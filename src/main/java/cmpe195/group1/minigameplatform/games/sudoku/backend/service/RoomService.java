@@ -5,9 +5,12 @@ import cmpe195.group1.minigameplatform.games.sudoku.backend.model.PlayerScore;
 import cmpe195.group1.minigameplatform.games.sudoku.backend.model.RoomParticipant;
 import cmpe195.group1.minigameplatform.games.sudoku.backend.model.RoomState;
 import cmpe195.group1.minigameplatform.games.sudoku.backend.model.SudokuCell;
-import cmpe195.group1.minigameplatform.games.sudoku.backend.payload.CreateRoomPayload;
-import cmpe195.group1.minigameplatform.games.sudoku.backend.payload.JoinRoomPayload;
 import cmpe195.group1.minigameplatform.games.sudoku.backend.payload.MakeMovePayload;
+import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.service.RoomActionResult;
+import cmpe195.group1.minigameplatform.multiplayer.service.SnapshotRoomService;
+import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,7 +18,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -23,39 +25,7 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class RoomService {
-
-    public static class JoinResult {
-        private final boolean ok;
-        private final String error;
-        private final String roomCode;
-
-        private JoinResult(boolean ok, String error, String roomCode) {
-            this.ok = ok;
-            this.error = error;
-            this.roomCode = roomCode;
-        }
-
-        public static JoinResult ok(String roomCode) {
-            return new JoinResult(true, null, roomCode);
-        }
-
-        public static JoinResult error(String error) {
-            return new JoinResult(false, error, null);
-        }
-
-        public boolean isOk() {
-            return ok;
-        }
-
-        public String getError() {
-            return error;
-        }
-
-        public String getRoomCode() {
-            return roomCode;
-        }
-    }
+public class RoomService implements SnapshotRoomService<RoomState> {
 
     private static final List<ColorProfile> COLORS = List.of(
         new ColorProfile("#3B82F6", "Blue"),
@@ -73,19 +43,20 @@ public class RoomService {
         if (roomCode == null) {
             return null;
         }
-        return rooms.get(roomCode.trim().toUpperCase(Locale.ROOT));
+        return rooms.get(RoomCodeUtils.normalize(roomCode));
     }
 
-    public RoomState createRoom(String clientId, CreateRoomPayload payload) {
+    @Override
+    public RoomState createRoom(String clientId, CreateRoomRequest payload) {
         String code;
         do {
-            code = generateCode();
+            code = RoomCodeUtils.generate(random, ROOM_CHARS, 6);
         } while (rooms.containsKey(code));
 
         int maxPlayers = payload != null && payload.getMaxPlayers() != null ? payload.getMaxPlayers() : 2;
         maxPlayers = Math.min(Math.max(2, maxPlayers), 4);
 
-        String hostName = payload != null ? payload.getHostName() : null;
+        String hostName = payload != null ? payload.resolvePlayerName() : null;
         if (hostName == null || hostName.isBlank()) {
             hostName = "Player 1";
         }
@@ -116,29 +87,30 @@ public class RoomService {
         return room;
     }
 
-    public JoinResult joinRoom(String clientId, JoinRoomPayload payload) {
-        String code = payload != null && payload.getRoomCode() != null
-            ? payload.getRoomCode().trim().toUpperCase(Locale.ROOT)
+    @Override
+    public RoomActionResult<RoomState> joinRoom(String clientId, JoinRoomRequest payload) {
+        String code = payload != null && payload.resolveRoomCode() != null
+            ? RoomCodeUtils.normalize(payload.resolveRoomCode())
             : "";
 
         RoomState room = rooms.get(code);
         if (room == null) {
-            return JoinResult.error("Room not found. Check the code and try again.");
+            return RoomActionResult.error("Room not found. Check the code and try again.");
         }
 
         synchronized (room) {
             if (!"waiting".equals(room.getStatus())) {
-                return JoinResult.error("Game already started. Cannot join now.");
+                return RoomActionResult.error("Game already started. Cannot join now.");
             }
             if (room.getParticipants().size() >= room.getMaxPlayers()) {
-                return JoinResult.error("Room is full.");
+                return RoomActionResult.error("Room is full.");
             }
 
             Optional<RoomParticipant> already = room.getParticipants().stream()
                 .filter(p -> Objects.equals(p.getClientId(), clientId))
                 .findFirst();
             if (already.isPresent()) {
-                return JoinResult.ok(code);
+                return RoomActionResult.ok(room);
             }
 
             int seatIndex = room.getParticipants().size();
@@ -156,7 +128,7 @@ public class RoomService {
                 clientId
             ));
 
-            return JoinResult.ok(code);
+            return RoomActionResult.ok(room);
         }
     }
 
@@ -369,15 +341,6 @@ public class RoomService {
         }
     }
 
-    private String generateCode() {
-        StringBuilder code = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            int idx = random.nextInt(ROOM_CHARS.length());
-            code.append(ROOM_CHARS.charAt(idx));
-        }
-        return code.toString();
-    }
-
     private boolean isBoardFull(List<List<SudokuCell>> board) {
         for (List<SudokuCell> row : board) {
             for (SudokuCell cell : row) {
@@ -481,5 +444,10 @@ public class RoomService {
         }
 
         return true;
+    }
+
+    @Override
+    public String roomCodeOf(RoomState room) {
+        return room != null ? room.getRoomCode() : null;
     }
 }

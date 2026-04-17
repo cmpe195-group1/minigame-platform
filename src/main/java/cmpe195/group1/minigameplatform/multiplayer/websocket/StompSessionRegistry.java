@@ -1,4 +1,4 @@
-package cmpe195.group1.minigameplatform.games.sudoku.backend.websocket;
+package cmpe195.group1.minigameplatform.multiplayer.websocket;
 
 import org.springframework.stereotype.Component;
 

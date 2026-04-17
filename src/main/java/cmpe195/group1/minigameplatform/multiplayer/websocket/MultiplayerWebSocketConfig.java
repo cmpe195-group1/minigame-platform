@@ -1,4 +1,4 @@
-package cmpe195.group1.minigameplatform.games.sudoku.backend.websocket;
+package cmpe195.group1.minigameplatform.multiplayer.websocket;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -8,7 +8,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 
 @Configuration
 @EnableWebSocketMessageBroker
-public class SudokuWebSocketConfig implements WebSocketMessageBrokerConfigurer {
+public class MultiplayerWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {

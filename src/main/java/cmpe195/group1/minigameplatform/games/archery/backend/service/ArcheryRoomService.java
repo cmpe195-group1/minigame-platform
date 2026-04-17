@@ -4,13 +4,15 @@ import cmpe195.group1.minigameplatform.games.archery.backend.model.ArcheryArrowS
 import cmpe195.group1.minigameplatform.games.archery.backend.model.ArcheryRoomPlayer;
 import cmpe195.group1.minigameplatform.games.archery.backend.model.ArcheryRoomState;
 import cmpe195.group1.minigameplatform.games.archery.backend.payload.ArcheryArrowShotPayload;
-import cmpe195.group1.minigameplatform.games.archery.backend.payload.ArcheryCreateRoomPayload;
-import cmpe195.group1.minigameplatform.games.archery.backend.payload.ArcheryJoinRoomPayload;
+import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.service.RoomActionResult;
+import cmpe195.group1.minigameplatform.multiplayer.service.SnapshotRoomService;
+import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -18,37 +20,7 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class ArcheryRoomService {
-
-    public static class ActionResult {
-        private final ArcheryRoomState room;
-        private final String error;
-
-        private ActionResult(ArcheryRoomState room, String error) {
-            this.room = room;
-            this.error = error;
-        }
-
-        public static ActionResult ok(ArcheryRoomState room) {
-            return new ActionResult(room, null);
-        }
-
-        public static ActionResult error(String error) {
-            return new ActionResult(null, error);
-        }
-
-        public boolean isOk() {
-            return error == null;
-        }
-
-        public ArcheryRoomState getRoom() {
-            return room;
-        }
-
-        public String getError() {
-            return error;
-        }
-    }
+public class ArcheryRoomService implements SnapshotRoomService<ArcheryRoomState> {
 
     private static final List<String> PLAYER_COLORS = List.of(
         "#e74c3c",
@@ -71,10 +43,11 @@ public class ArcheryRoomService {
         return rooms.get(normalizeRoomId(roomId));
     }
 
-    public ArcheryRoomState createRoom(String clientId, ArcheryCreateRoomPayload payload) {
+    @Override
+    public ArcheryRoomState createRoom(String clientId, CreateRoomRequest payload) {
         String roomId;
         do {
-            roomId = generateRoomId();
+            roomId = RoomCodeUtils.generate(random, ROOM_CHARS, 5);
         } while (rooms.containsKey(roomId));
 
         int maxPlayers = payload != null && payload.getMaxPlayers() != null ? payload.getMaxPlayers() : 2;
@@ -93,7 +66,7 @@ public class ArcheryRoomService {
         room.setWindForce(freshWind());
         room.setPlayers(new ArrayList<>(List.of(createPlayer(
             clientId,
-            resolvePlayerName(payload != null ? payload.getPlayerName() : null, 1),
+            resolvePlayerName(payload != null ? payload.resolvePlayerName() : null, 1),
             0
         ))));
 
@@ -101,24 +74,25 @@ public class ArcheryRoomService {
         return room;
     }
 
-    public ActionResult joinRoom(String clientId, ArcheryJoinRoomPayload payload) {
-        String roomId = payload != null ? normalizeRoomId(payload.getRoomId()) : "";
+    @Override
+    public RoomActionResult<ArcheryRoomState> joinRoom(String clientId, JoinRoomRequest payload) {
+        String roomId = payload != null ? RoomCodeUtils.normalize(payload.resolveRoomCode()) : "";
         ArcheryRoomState room = rooms.get(roomId);
         if (room == null) {
-            return ActionResult.error("Room not found. Check the code and try again.");
+            return RoomActionResult.error("Room not found. Check the code and try again.");
         }
 
         synchronized (room) {
             Optional<ArcheryRoomPlayer> existingPlayer = findPlayer(room, clientId);
             if (existingPlayer.isPresent()) {
-                return ActionResult.ok(room);
+                return RoomActionResult.ok(room);
             }
 
             if (!"waiting".equals(room.getState())) {
-                return ActionResult.error("This game has already started.");
+                return RoomActionResult.error("This game has already started.");
             }
             if (room.getPlayers().size() >= room.getMaxPlayers()) {
-                return ActionResult.error("Room is full.");
+                return RoomActionResult.error("Room is full.");
             }
 
             int slotIdx = room.getPlayers().size();
@@ -128,24 +102,24 @@ public class ArcheryRoomService {
                 slotIdx
             ));
 
-            return ActionResult.ok(room);
+            return RoomActionResult.ok(room);
         }
     }
 
-    public ActionResult setReady(String clientId, String roomId) {
+    public RoomActionResult<ArcheryRoomState> setReady(String clientId, String roomId) {
         ArcheryRoomState room = getRoom(roomId);
         if (room == null) {
-            return ActionResult.error("Room not found.");
+            return RoomActionResult.error("Room not found.");
         }
 
         synchronized (room) {
             if (!"waiting".equals(room.getState())) {
-                return ActionResult.error("Game already started.");
+                return RoomActionResult.error("Game already started.");
             }
 
             ArcheryRoomPlayer player = findPlayer(room, clientId).orElse(null);
             if (player == null) {
-                return ActionResult.error("You are not in this room.");
+                return RoomActionResult.error("You are not in this room.");
             }
 
             player.setReady(true);
@@ -153,61 +127,61 @@ public class ArcheryRoomService {
                 startRoom(room);
             }
 
-            return ActionResult.ok(room);
+            return RoomActionResult.ok(room);
         }
     }
 
-    public ActionResult startGame(String clientId, String roomId) {
+    public RoomActionResult<ArcheryRoomState> startGame(String clientId, String roomId) {
         ArcheryRoomState room = getRoom(roomId);
         if (room == null) {
-            return ActionResult.error("Room not found.");
+            return RoomActionResult.error("Room not found.");
         }
 
         synchronized (room) {
             if (!Objects.equals(room.getHostId(), clientId)) {
-                return ActionResult.error("Only the host can start the game.");
+                return RoomActionResult.error("Only the host can start the game.");
             }
             if (!"waiting".equals(room.getState())) {
-                return ActionResult.error("Game already started.");
+                return RoomActionResult.error("Game already started.");
             }
             if (room.getPlayers().size() < 2) {
-                return ActionResult.error("Need at least 2 players to start.");
+                return RoomActionResult.error("Need at least 2 players to start.");
             }
 
             startRoom(room);
-            return ActionResult.ok(room);
+            return RoomActionResult.ok(room);
         }
     }
 
-    public ActionResult recordArrowShot(String clientId, ArcheryArrowShotPayload payload) {
+    public RoomActionResult<ArcheryRoomState> recordArrowShot(String clientId, ArcheryArrowShotPayload payload) {
         if (payload == null) {
-            return ActionResult.error("Missing shot payload.");
+            return RoomActionResult.error("Missing shot payload.");
         }
 
         ArcheryRoomState room = getRoom(payload.getRoomId());
         if (room == null) {
-            return ActionResult.error("Room not found.");
+            return RoomActionResult.error("Room not found.");
         }
 
         synchronized (room) {
             if (!"playing".equals(room.getState())) {
-                return ActionResult.error("Game is not active.");
+                return RoomActionResult.error("Game is not active.");
             }
             if (room.getPlayers().isEmpty()) {
-                return ActionResult.error("No active players in the room.");
+                return RoomActionResult.error("No active players in the room.");
             }
             if (room.getCurrentSlot() < 0 || room.getCurrentSlot() >= room.getPlayers().size()) {
-                return ActionResult.error("Turn order is out of sync.");
+                return RoomActionResult.error("Turn order is out of sync.");
             }
 
             ArcheryRoomPlayer player = findPlayer(room, clientId).orElse(null);
             if (player == null) {
-                return ActionResult.error("You are not in this room.");
+                return RoomActionResult.error("You are not in this room.");
             }
 
             ArcheryRoomPlayer activePlayer = room.getPlayers().get(room.getCurrentSlot());
             if (!Objects.equals(activePlayer.getId(), player.getId())) {
-                return ActionResult.error("It is not your turn yet.");
+                return RoomActionResult.error("It is not your turn yet.");
             }
 
             int score = Math.max(0, Math.min(10, payload.getScore() != null ? payload.getScore() : 0));
@@ -218,7 +192,7 @@ public class ArcheryRoomService {
             room.setArrowsFired(room.getArrowsFired() + 1);
 
             if (room.getArrowsFired() < room.getArrowsPerRound()) {
-                return ActionResult.ok(room);
+                return RoomActionResult.ok(room);
             }
 
             room.setArrowsFired(0);
@@ -228,17 +202,18 @@ public class ArcheryRoomService {
                 if (room.getCurrentRound() >= room.getTotalRounds()) {
                     room.setState("finished");
                     room.setCurrentSlot(0);
-                    return ActionResult.ok(room);
+                    return RoomActionResult.ok(room);
                 }
                 room.setCurrentRound(room.getCurrentRound() + 1);
             }
 
             room.setCurrentSlot(nextSlot);
             room.setWindForce(freshWind());
-            return ActionResult.ok(room);
+            return RoomActionResult.ok(room);
         }
     }
 
+    @Override
     public ArcheryRoomState disconnect(String clientId, String roomId) {
         ArcheryRoomState room = getRoom(roomId);
         if (room == null) {
@@ -328,19 +303,13 @@ public class ArcheryRoomService {
         return trimmed.length() > 20 ? trimmed.substring(0, 20) : trimmed;
     }
 
-    private String generateRoomId() {
-        StringBuilder id = new StringBuilder();
-        for (int i = 0; i < 5; i++) {
-            id.append(ROOM_CHARS.charAt(random.nextInt(ROOM_CHARS.length())));
-        }
-        return id.toString();
+    private String normalizeRoomId(String roomId) {
+        return RoomCodeUtils.normalize(roomId);
     }
 
-    private String normalizeRoomId(String roomId) {
-        if (roomId == null) {
-            return "";
-        }
-        return roomId.trim().toUpperCase(Locale.ROOT);
+    @Override
+    public String roomCodeOf(ArcheryRoomState room) {
+        return room != null ? room.getId() : null;
     }
 
     private double freshWind() {

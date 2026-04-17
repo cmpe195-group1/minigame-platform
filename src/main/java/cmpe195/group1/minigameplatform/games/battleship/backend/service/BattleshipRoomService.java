@@ -1,12 +1,12 @@
 package cmpe195.group1.minigameplatform.games.battleship.backend.service;
 
 import cmpe195.group1.minigameplatform.games.battleship.backend.model.BattleshipRoom;
+import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -282,10 +282,7 @@ public class BattleshipRoomService {
     }
 
     private String normalizeRoomId(String roomId) {
-        if (roomId == null) {
-            return "";
-        }
-        return roomId.trim().toUpperCase(Locale.ROOT);
+        return RoomCodeUtils.normalize(roomId);
     }
 
     @FunctionalInterface

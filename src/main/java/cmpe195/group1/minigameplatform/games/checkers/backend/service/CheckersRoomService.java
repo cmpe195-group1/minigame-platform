@@ -5,53 +5,23 @@ import cmpe195.group1.minigameplatform.games.checkers.backend.model.CheckersPiec
 import cmpe195.group1.minigameplatform.games.checkers.backend.model.CheckersPosition;
 import cmpe195.group1.minigameplatform.games.checkers.backend.model.RoomParticipant;
 import cmpe195.group1.minigameplatform.games.checkers.backend.model.RoomState;
-import cmpe195.group1.minigameplatform.games.checkers.backend.payload.CreateRoomPayload;
-import cmpe195.group1.minigameplatform.games.checkers.backend.payload.JoinRoomPayload;
 import cmpe195.group1.minigameplatform.games.checkers.backend.payload.MovePayload;
+import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.service.RoomActionResult;
+import cmpe195.group1.minigameplatform.multiplayer.service.SnapshotRoomService;
+import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class CheckersRoomService {
-
-    public static class JoinResult {
-        private final boolean ok;
-        private final String error;
-        private final String roomCode;
-
-        private JoinResult(boolean ok, String error, String roomCode) {
-            this.ok = ok;
-            this.error = error;
-            this.roomCode = roomCode;
-        }
-
-        public static JoinResult ok(String roomCode) {
-            return new JoinResult(true, null, roomCode);
-        }
-
-        public static JoinResult error(String error) {
-            return new JoinResult(false, error, null);
-        }
-
-        public boolean isOk() {
-            return ok;
-        }
-
-        public String getError() {
-            return error;
-        }
-
-        public String getRoomCode() {
-            return roomCode;
-        }
-    }
+public class CheckersRoomService implements SnapshotRoomService<RoomState> {
 
     private static final String ROOM_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -62,16 +32,17 @@ public class CheckersRoomService {
         if (roomCode == null) {
             return null;
         }
-        return rooms.get(roomCode.trim().toUpperCase(Locale.ROOT));
+        return rooms.get(RoomCodeUtils.normalize(roomCode));
     }
 
-    public RoomState createRoom(String clientId, CreateRoomPayload payload) {
+    @Override
+    public RoomState createRoom(String clientId, CreateRoomRequest payload) {
         String code;
         do {
-            code = generateCode();
+            code = RoomCodeUtils.generate(random, ROOM_CHARS, 6);
         } while (rooms.containsKey(code));
 
-        String hostName = payload != null ? payload.getHostName() : null;
+        String hostName = payload != null ? payload.resolvePlayerName() : null;
         if (hostName == null || hostName.isBlank()) {
             hostName = "Player 1";
         }
@@ -90,27 +61,28 @@ public class CheckersRoomService {
         return room;
     }
 
-    public JoinResult joinRoom(String clientId, JoinRoomPayload payload) {
-        String code = payload != null && payload.getRoomCode() != null
-            ? payload.getRoomCode().trim().toUpperCase(Locale.ROOT)
+    @Override
+    public RoomActionResult<RoomState> joinRoom(String clientId, JoinRoomRequest payload) {
+        String code = payload != null && payload.resolveRoomCode() != null
+            ? RoomCodeUtils.normalize(payload.resolveRoomCode())
             : "";
 
         RoomState room = rooms.get(code);
         if (room == null) {
-            return JoinResult.error("Room not found. Check the code and try again.");
+            return RoomActionResult.error("Room not found. Check the code and try again.");
         }
 
         synchronized (room) {
             if (!"waiting".equals(room.getStatus())) {
-                return JoinResult.error("Game already started. Cannot join now.");
+                return RoomActionResult.error("Game already started. Cannot join now.");
             }
             if (room.getParticipants().size() >= 2) {
-                return JoinResult.error("Room is full.");
+                return RoomActionResult.error("Room is full.");
             }
 
             for (RoomParticipant participant : room.getParticipants()) {
                 if (Objects.equals(participant.getClientId(), clientId)) {
-                    return JoinResult.ok(code);
+                    return RoomActionResult.ok(room);
                 }
             }
 
@@ -120,7 +92,7 @@ public class CheckersRoomService {
             }
 
             room.getParticipants().add(new RoomParticipant(2, playerName, clientId, "black"));
-            return JoinResult.ok(code);
+            return RoomActionResult.ok(room);
         }
     }
 
@@ -322,11 +294,8 @@ public class CheckersRoomService {
         return null;
     }
 
-    private String generateCode() {
-        StringBuilder code = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            code.append(ROOM_CHARS.charAt(random.nextInt(ROOM_CHARS.length())));
-        }
-        return code.toString();
+    @Override
+    public String roomCodeOf(RoomState room) {
+        return room != null ? room.getRoomCode() : null;
     }
 }
