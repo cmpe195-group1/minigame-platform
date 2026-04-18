@@ -1,38 +1,28 @@
 import { AnimatePresence, motion } from "framer-motion"
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
+import { useRoomGame } from "./room/useRoomGame"
+import type {
+  BroadcastGameState,
+  Direction,
+  HandoffStage,
+  LobbyPlayer,
+  PendingTurnState,
+  Phase,
+  PlayMode,
+  PlayerState,
+  PlayableColor,
+  SetupMode,
+  UnoCard,
+} from "./types"
+import {
+  DEFAULT_SETTINGS,
+  HOST_PLAYER_ID,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  STARTING_HAND_SIZE,
+  TURN_SECONDS,
+} from "./types"
 
-type Phase = "setup" | "handoff" | "playing" | "finished"
-type SetupMode = "local" | "host" | "join"
-type HandoffStage = "pass" | "reveal"
-type Direction = 1 | -1
-type UnoColor = "red" | "yellow" | "green" | "blue" | "wild"
-type PlayableColor = Exclude<UnoColor, "wild">
-type UnoCardKind = "number" | "skip" | "reverse" | "drawTwo" | "wild" | "wildDrawFour"
-
-interface UnoCard {
-  id: string
-  color: UnoColor
-  kind: UnoCardKind
-  value: number | null
-}
-
-interface PlayerState {
-  id: string
-  name: string
-  hand: UnoCard[]
-}
-
-interface PendingTurnState {
-  currentPlayerIndex: number
-  direction: Direction
-  activeColor: PlayableColor
-  message: string
-}
-
-const TURN_SECONDS = 120
-const STARTING_HAND_SIZE = 7
-const MIN_PLAYERS = 2
-const MAX_PLAYERS = 6
 const COLOR_ORDER: PlayableColor[] = ["red", "yellow", "green", "blue"]
 
 const COLOR_CLASSES: Record<PlayableColor, { card: string; pill: string; accent: string; ring: string }> = {
@@ -234,6 +224,14 @@ function createStarterPlayers(names: string[]) {
   }))
 }
 
+function createLobbyPlayers(entries: LobbyPlayer[]) {
+  return entries.map<PlayerState>((player) => ({
+    id: player.id,
+    name: player.name,
+    hand: [],
+  }))
+}
+
 function getCardBackground(card: UnoCard) {
   if (card.color === "wild") {
     return "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-700"
@@ -286,10 +284,18 @@ function buildAnimatedCardOffsets(length: number) {
 }
 
 export default function Uno() {
+  const room = useRoomGame()
+
   const [setupMode, setSetupMode] = useState<SetupMode>("local")
+  const [playMode, setPlayMode] = useState<PlayMode>("local")
   const [phase, setPhase] = useState<Phase>("setup")
   const [handoffStage, setHandoffStage] = useState<HandoffStage>("pass")
   const [playerNames, setPlayerNames] = useState<string[]>(["", ""])
+  const [hostName, setHostName] = useState("")
+  const [joinName, setJoinName] = useState("")
+  const [joinHostCode, setJoinHostCode] = useState("")
+  const [hostStatus, setHostStatus] = useState("")
+  const [joinStatus, setJoinStatus] = useState("")
   const [players, setPlayers] = useState<PlayerState[]>([])
   const [drawPile, setDrawPile] = useState<UnoCard[]>([])
   const [discardPile, setDiscardPile] = useState<UnoCard[]>([])
@@ -305,13 +311,65 @@ export default function Uno() {
   const [setupError, setSetupError] = useState("")
   const [turnMessage, setTurnMessage] = useState("Set the table and start a classic local UNO match.")
   const [winnerId, setWinnerId] = useState<string | null>(null)
+  const [localPlayerId, setLocalPlayerId] = useState<string | null>(null)
+  const [guestActionPending, setGuestActionPending] = useState(false)
+  const [submittedActionStateKey, setSubmittedActionStateKey] = useState<string | null>(null)
+
+  const lastHandledPendingActionIdRef = useRef<number | null>(null)
 
   const activePlayer = players[currentPlayerIndex] ?? null
   const topDiscard = discardPile[discardPile.length - 1] ?? null
   const currentPlayerHand = activePlayer?.hand ?? []
-  const playableCards = currentPlayerHand.filter((card) => isPlayableCard(card, topDiscard, activeColor, currentPlayerHand))
+  const localPlayer = players.find((player) => player.id === localPlayerId) ?? null
+  const visiblePlayer = playMode === "local" ? activePlayer : localPlayer
+  const visibleHand = visiblePlayer?.hand ?? []
+  const isMyTurn = phase === "playing" && Boolean(activePlayer) && (playMode === "local" || activePlayer?.id === localPlayerId)
+  const playableCards = isMyTurn
+    ? visibleHand.filter((card) => isPlayableCard(card, topDiscard, activeColor, visibleHand))
+    : []
   const isAwaitingEndTurn = Boolean(awaitingEndTurnReason || pendingTurnState)
   const handoffFan = useMemo(() => buildAnimatedCardOffsets(5), [])
+  const lobbyPlayers = useMemo(() => {
+    if (room.roomState?.participants?.length) {
+      return room.roomState.participants.map<LobbyPlayer>((player) => ({
+        id: player.playerId,
+        name: player.name,
+      }))
+    }
+
+    if (setupMode === "host" && hostName.trim()) {
+      return [{ id: HOST_PLAYER_ID, name: hostName.trim() }]
+    }
+
+    return []
+  }, [hostName, room.roomState?.participants, setupMode])
+  const roomActionStateKey = useMemo(
+    () =>
+      JSON.stringify({
+        phase,
+        currentPlayerIndex,
+        activeColor,
+        hasDrawnThisTurn,
+        drawnCardId,
+        awaitingEndTurnReason,
+        pendingTurnState,
+        winnerId,
+        turnMessage,
+        visibleHandIds: visibleHand.map((card) => card.id),
+      }),
+    [
+      activeColor,
+      awaitingEndTurnReason,
+      currentPlayerIndex,
+      drawnCardId,
+      hasDrawnThisTurn,
+      pendingTurnState,
+      phase,
+      turnMessage,
+      visibleHand,
+      winnerId,
+    ],
+  )
 
   const modeCards = [
     {
@@ -331,7 +389,29 @@ export default function Uno() {
     },
   ]
 
-  const resetToSetup = useCallback(() => {
+  const applyBroadcastState = useCallback((nextState: BroadcastGameState) => {
+    setPlayers(nextState.players)
+    setDrawPile(nextState.drawPile)
+    setDiscardPile(nextState.discardPile)
+    setCurrentPlayerIndex(nextState.currentPlayerIndex)
+    setDirection(nextState.direction)
+    setActiveColor(nextState.activeColor)
+    setSecondsLeft(nextState.secondsLeft)
+    setHasDrawnThisTurn(nextState.hasDrawnThisTurn)
+    setDrawnCardId(nextState.drawnCardId)
+    setAwaitingEndTurnReason(nextState.awaitingEndTurnReason)
+    setPendingTurnState(nextState.pendingTurnState)
+    setTurnMessage(nextState.turnMessage)
+    setWinnerId(nextState.winnerId)
+    setPhase(nextState.phase)
+  }, [])
+
+  const resetToSetup = useCallback((nextMode?: SetupMode) => {
+    if (room.role !== "none") {
+      room.leaveRoom()
+    }
+
+    setPlayMode(nextMode === "join" ? "guest" : "local")
     setPhase("setup")
     setHandoffStage("pass")
     setPlayers([])
@@ -347,8 +427,14 @@ export default function Uno() {
     setPendingTurnState(null)
     setPendingWildCardId(null)
     setWinnerId(null)
+    setLocalPlayerId(null)
+    setGuestActionPending(false)
+    setSubmittedActionStateKey(null)
+    setHostStatus("")
+    setJoinStatus("")
+    setJoinHostCode("")
     setTurnMessage("Set the table and start a classic local UNO match.")
-  }, [])
+  }, [room.leaveRoom, room.role])
 
   const commitNextTurn = useCallback(
     (nextState: {
@@ -367,28 +453,115 @@ export default function Uno() {
       setDirection(nextState.direction)
       setActiveColor(nextState.activeColor)
       setTurnMessage(nextState.message)
-      setPhase("handoff")
+      setPhase(playMode === "local" ? "handoff" : "playing")
       setHandoffStage("pass")
-      setSecondsLeft(TURN_SECONDS)
+      setSecondsLeft(DEFAULT_SETTINGS.turnSeconds)
       setHasDrawnThisTurn(false)
       setDrawnCardId(null)
       setAwaitingEndTurnReason(null)
       setPendingTurnState(null)
       setPendingWildCardId(null)
+      setGuestActionPending(false)
+      setSubmittedActionStateKey(null)
     },
-    [],
+    [playMode],
   )
 
   const startTurn = useCallback(() => {
     setPhase("playing")
     setHandoffStage("pass")
-    setSecondsLeft(TURN_SECONDS)
+    setSecondsLeft(DEFAULT_SETTINGS.turnSeconds)
     setHasDrawnThisTurn(false)
     setDrawnCardId(null)
     setAwaitingEndTurnReason(null)
     setPendingTurnState(null)
     setPendingWildCardId(null)
   }, [])
+
+  const initializeMatch = useCallback(
+    (initialPlayers: PlayerState[], nextPlayMode: PlayMode) => {
+      let nextDrawPile = createDeck()
+      const seededPlayers = initialPlayers.map((player) => ({ ...player, hand: [] as UnoCard[] }))
+
+      seededPlayers.forEach((player, playerIndex) => {
+        const dealt = drawCards(nextDrawPile, [], STARTING_HAND_SIZE)
+        seededPlayers[playerIndex] = {
+          ...player,
+          hand: dealt.drawnCards,
+        }
+        nextDrawPile = dealt.drawPile
+      })
+
+      const openingIndex = nextDrawPile.findIndex((card) => card.color !== "wild")
+      const openingCard = nextDrawPile[openingIndex >= 0 ? openingIndex : 0]
+
+      if (!openingCard || openingCard.color === "wild") {
+        setSetupError("The deck could not be prepared. Please try starting the match again.")
+        return
+      }
+
+      nextDrawPile = nextDrawPile.filter((card) => card.id !== openingCard.id)
+      const nextDiscardPile = [openingCard]
+      let nextDirection: Direction = 1
+      let nextCurrentPlayerIndex = 0
+      let openingMessage = `${seededPlayers[0]?.name ?? "Player 1"} starts. Match the ${getColorLabel(openingCard.color)} ${getCardSubtitle(openingCard).toLowerCase()}.`
+
+      if (openingCard.kind === "skip") {
+        nextCurrentPlayerIndex = getNextPlayerIndex(seededPlayers.length, 0, 1, 1)
+        openingMessage = `${seededPlayers[0]?.name ?? "Player 1"} is skipped by the opening card. ${seededPlayers[nextCurrentPlayerIndex].name} starts the round.`
+      }
+
+      if (openingCard.kind === "reverse") {
+        if (seededPlayers.length === 2) {
+          nextCurrentPlayerIndex = 1
+          openingMessage = `${seededPlayers[0]?.name ?? "Player 1"} loses the opening turn to a Reverse. ${seededPlayers[nextCurrentPlayerIndex].name} starts.`
+        } else {
+          nextDirection = -1
+          nextCurrentPlayerIndex = getNextPlayerIndex(seededPlayers.length, 0, -1, 1)
+          openingMessage = `Opening Reverse flips the table. ${seededPlayers[nextCurrentPlayerIndex].name} starts counter-clockwise.`
+        }
+      }
+
+      let finalPlayers = seededPlayers
+      let finalDrawPile = nextDrawPile
+      let finalDiscardPile = nextDiscardPile
+
+      if (openingCard.kind === "drawTwo") {
+        const drawResult = drawCards(nextDrawPile, nextDiscardPile, 2)
+        finalDrawPile = drawResult.drawPile
+        finalDiscardPile = drawResult.discardPile
+        finalPlayers = [...seededPlayers]
+        finalPlayers[0] = {
+          ...finalPlayers[0],
+          hand: [...finalPlayers[0].hand, ...drawResult.drawnCards],
+        }
+        nextCurrentPlayerIndex = getNextPlayerIndex(finalPlayers.length, 0, 1, 1)
+        openingMessage = `${finalPlayers[0].name} draws two from the opening card. ${finalPlayers[nextCurrentPlayerIndex].name} opens the match.`
+      }
+
+      setSetupError("")
+      setPlayMode(nextPlayMode)
+      setPlayers(finalPlayers)
+      setDrawPile(finalDrawPile)
+      setDiscardPile(finalDiscardPile)
+      setCurrentPlayerIndex(nextCurrentPlayerIndex)
+      setDirection(nextDirection)
+      setActiveColor(openingCard.color)
+      setSecondsLeft(DEFAULT_SETTINGS.turnSeconds)
+      setHasDrawnThisTurn(false)
+      setDrawnCardId(null)
+      setAwaitingEndTurnReason(null)
+      setPendingTurnState(null)
+      setPendingWildCardId(null)
+      setWinnerId(null)
+      setGuestActionPending(false)
+      setSubmittedActionStateKey(null)
+      setTurnMessage(openingMessage)
+      setPhase(nextPlayMode === "local" ? "handoff" : "playing")
+      setHandoffStage("pass")
+    },
+    [],
+  )
 
   const startLocalMatch = () => {
     const trimmedNames = playerNames.map((name) => name.trim())
@@ -405,94 +578,31 @@ export default function Uno() {
       return
     }
 
-    const nextPlayers = createStarterPlayers(trimmedNames)
-    let nextDrawPile = createDeck()
+    setLocalPlayerId(null)
+    initializeMatch(createStarterPlayers(trimmedNames), "local")
+  }
 
-    nextPlayers.forEach((_, playerIndex) => {
-      const dealt = drawCards(nextDrawPile, [], STARTING_HAND_SIZE)
-      nextPlayers[playerIndex] = {
-        ...nextPlayers[playerIndex],
-        hand: dealt.drawnCards,
-      }
-      nextDrawPile = dealt.drawPile
-    })
+  const startHostedMatch = () => {
+    const trimmedHostName = hostName.trim()
 
-    const openingIndex = nextDrawPile.findIndex((card) => card.color !== "wild")
-    const openingCard = nextDrawPile[openingIndex >= 0 ? openingIndex : 0]
-
-    if (!openingCard || openingCard.color === "wild") {
-      setSetupError("The deck could not be prepared. Please try starting the match again.")
+    if (!trimmedHostName) {
+      setSetupError("Enter your host player name before starting the hosted match.")
       return
     }
 
-    nextDrawPile = nextDrawPile.filter((card) => card.id !== openingCard.id)
-    const nextDiscardPile = [openingCard]
-    let nextDirection: Direction = 1
-    let nextCurrentPlayerIndex = 0
-    let openingMessage = `${trimmedNames[0]} starts. Match the ${getColorLabel(openingCard.color)} ${getCardSubtitle(openingCard).toLowerCase()}.`
-
-    if (openingCard.kind === "skip") {
-      nextCurrentPlayerIndex = getNextPlayerIndex(nextPlayers.length, 0, 1, 1)
-      openingMessage = `${trimmedNames[0]} is skipped by the opening card. ${nextPlayers[nextCurrentPlayerIndex].name} starts the round.`
-    }
-
-    if (openingCard.kind === "reverse") {
-      if (nextPlayers.length === 2) {
-        nextCurrentPlayerIndex = 1
-        openingMessage = `${trimmedNames[0]} loses the opening turn to a Reverse. ${nextPlayers[nextCurrentPlayerIndex].name} starts.`
-      } else {
-        nextDirection = -1
-        nextCurrentPlayerIndex = getNextPlayerIndex(nextPlayers.length, 0, -1, 1)
-        openingMessage = `Opening Reverse flips the table. ${nextPlayers[nextCurrentPlayerIndex].name} starts counter-clockwise.`
-      }
-    }
-
-    if (openingCard.kind === "drawTwo") {
-      const drawResult = drawCards(nextDrawPile, nextDiscardPile, 2)
-      nextDrawPile = drawResult.drawPile
-      const updatedPlayers = [...nextPlayers]
-      updatedPlayers[0] = {
-        ...updatedPlayers[0],
-        hand: [...updatedPlayers[0].hand, ...drawResult.drawnCards],
-      }
-      nextCurrentPlayerIndex = getNextPlayerIndex(updatedPlayers.length, 0, 1, 1)
-      setPlayers(updatedPlayers)
-      setDrawPile(nextDrawPile)
-      setDiscardPile(drawResult.discardPile)
-      setCurrentPlayerIndex(nextCurrentPlayerIndex)
-      setDirection(1)
-      setActiveColor(openingCard.color)
-      setTurnMessage(
-        `${trimmedNames[0]} draws two from the opening card. ${updatedPlayers[nextCurrentPlayerIndex].name} opens the match.`,
-      )
-      setSetupError("")
-      setWinnerId(null)
-      setPhase("handoff")
-      setHandoffStage("pass")
-      setSecondsLeft(TURN_SECONDS)
-      setHasDrawnThisTurn(false)
-      setDrawnCardId(null)
-      setAwaitingEndTurnReason(null)
-      setPendingTurnState(null)
-      setPendingWildCardId(null)
+    if (lobbyPlayers.length < 2) {
+      setSetupError("At least one guest must join the lobby before the hosted match can start.")
       return
     }
 
-    setSetupError("")
-    setPlayers(nextPlayers)
-    setDrawPile(nextDrawPile)
-    setDiscardPile(nextDiscardPile)
-    setCurrentPlayerIndex(nextCurrentPlayerIndex)
-    setDirection(nextDirection)
-    setActiveColor(openingCard.color)
-    setSecondsLeft(TURN_SECONDS)
-    setHasDrawnThisTurn(false)
-    setDrawnCardId(null)
-    setPendingWildCardId(null)
-    setWinnerId(null)
-    setTurnMessage(openingMessage)
-    setPhase("handoff")
-    setHandoffStage("pass")
+    if (!room.roomState?.roomCode) {
+      setSetupError("Generate a room code before starting the hosted match.")
+      return
+    }
+
+    setLocalPlayerId(HOST_PLAYER_ID)
+    setHostStatus("Hosted match started.")
+    initializeMatch(createLobbyPlayers(lobbyPlayers), "host")
   }
 
   const handleSetupModeChange = (nextMode: SetupMode) => {
@@ -500,7 +610,7 @@ export default function Uno() {
       return
     }
 
-    resetToSetup()
+    resetToSetup(nextMode)
     setSetupMode(nextMode)
     setSetupError("")
   }
@@ -546,6 +656,165 @@ export default function Uno() {
     },
     [],
   )
+
+  useEffect(() => {
+    if (!room.joinError) {
+      return
+    }
+
+    setSetupError(room.joinError)
+
+    if (setupMode === "host") {
+      setHostStatus(room.joinError)
+    }
+
+    if (setupMode === "join") {
+      setJoinStatus(room.joinError)
+    }
+  }, [room.joinError, setupMode])
+
+  useEffect(() => {
+    const roomState = room.roomState
+
+    if (!roomState) {
+      return
+    }
+
+    const participant = roomState.participants.find((player) => player.clientId === room.myClientId) ?? null
+    const resolvedLocalPlayerId = room.role === "host" ? HOST_PLAYER_ID : participant?.playerId ?? null
+    setLocalPlayerId(resolvedLocalPlayerId)
+
+    if (room.role === "host") {
+      setPlayMode("host")
+      if (phase === "setup") {
+        setHostStatus("Room code ready. Share it with your friends to build the lobby.")
+      }
+    }
+
+    if (room.role === "guest") {
+      setSetupMode("join")
+      setPlayMode("guest")
+
+      if (roomState.systemMessage) {
+        setJoinStatus(roomState.systemMessage)
+      } else if (roomState.gameState?.phase === "finished") {
+        setJoinStatus("Match complete.")
+      } else if (roomState.gameState) {
+        const current = roomState.gameState.players[roomState.gameState.currentPlayerIndex] ?? null
+        setJoinStatus(
+          current?.id === resolvedLocalPlayerId
+            ? "It is your turn. Play from this device."
+            : `Waiting for ${current?.name ?? "the next player"}.`,
+        )
+      } else {
+        setJoinStatus("Connected to the lobby. Waiting for the host to start the match.")
+      }
+    }
+
+    if (room.role === "guest" && roomState.gameState) {
+      applyBroadcastState(roomState.gameState)
+    } else if (room.role === "guest") {
+      setPhase("setup")
+      setPlayers([])
+      setDrawPile([])
+      setDiscardPile([])
+      setCurrentPlayerIndex(0)
+      setDirection(1)
+      setActiveColor("red")
+      setSecondsLeft(DEFAULT_SETTINGS.turnSeconds)
+      setHasDrawnThisTurn(false)
+      setDrawnCardId(null)
+      setAwaitingEndTurnReason(null)
+      setPendingTurnState(null)
+      setPendingWildCardId(null)
+      setWinnerId(null)
+      setGuestActionPending(false)
+      setSubmittedActionStateKey(null)
+      setTurnMessage("Waiting for the host to start the UNO match.")
+    }
+  }, [applyBroadcastState, phase, room.myClientId, room.role, room.roomState])
+
+  useEffect(() => {
+    if (!guestActionPending || !submittedActionStateKey || playMode !== "guest") {
+      return
+    }
+
+    if (roomActionStateKey !== submittedActionStateKey) {
+      setGuestActionPending(false)
+      setSubmittedActionStateKey(null)
+    }
+  }, [guestActionPending, playMode, roomActionStateKey, submittedActionStateKey])
+
+  useEffect(() => {
+    if (playMode !== "guest" || !guestActionPending) {
+      return
+    }
+
+    if (phase !== "playing") {
+      setGuestActionPending(false)
+      setSubmittedActionStateKey(null)
+    }
+  }, [guestActionPending, phase, playMode])
+
+  useEffect(() => {
+    if (!pendingWildCardId) {
+      return
+    }
+
+    const cardStillVisible = visibleHand.some((card) => card.id === pendingWildCardId)
+    if (phase !== "playing" || !isMyTurn || !cardStillVisible) {
+      setPendingWildCardId(null)
+    }
+  }, [isMyTurn, pendingWildCardId, phase, visibleHand])
+
+  useEffect(() => {
+    if (
+      playMode !== "host" ||
+      room.role !== "host" ||
+      !room.roomState?.roomCode ||
+      phase === "setup" ||
+      players.length === 0
+    ) {
+      return
+    }
+
+    room.publishState({
+      phase,
+      players,
+      drawPile,
+      discardPile,
+      currentPlayerIndex,
+      direction,
+      activeColor,
+      secondsLeft,
+      hasDrawnThisTurn,
+      drawnCardId,
+      awaitingEndTurnReason,
+      pendingTurnState,
+      turnMessage,
+      winnerId,
+      settings: DEFAULT_SETTINGS,
+    })
+  }, [
+    activeColor,
+    awaitingEndTurnReason,
+    currentPlayerIndex,
+    direction,
+    discardPile,
+    drawPile,
+    drawnCardId,
+    hasDrawnThisTurn,
+    pendingTurnState,
+    phase,
+    playMode,
+    players,
+    room.publishState,
+    room.role,
+    room.roomState?.roomCode,
+    secondsLeft,
+    turnMessage,
+    winnerId,
+  ])
 
   const resolvePlayedCard = useCallback(
     (cardId: string, chosenColor?: PlayableColor) => {
@@ -684,8 +953,141 @@ export default function Uno() {
     ],
   )
 
+  useEffect(() => {
+    if (room.role !== "host") {
+      return
+    }
+
+    const pendingAction = room.roomState?.pendingAction
+
+    if (!pendingAction || lastHandledPendingActionIdRef.current === pendingAction.actionId) {
+      return
+    }
+
+    lastHandledPendingActionIdRef.current = pendingAction.actionId
+
+    if (phase !== "playing" || !activePlayer || activePlayer.id !== pendingAction.playerId) {
+      return
+    }
+
+    if (pendingAction.kind === "drawCard") {
+      const drawResult = drawCards(drawPile, discardPile, 1)
+
+      if (drawResult.drawnCards.length === 0) {
+        setDrawPile(drawResult.drawPile)
+        setDiscardPile(drawResult.discardPile)
+        setAwaitingEndTurnReason("noDraw")
+        setTurnMessage(`${activePlayer.name} had no card to draw. End the turn to continue.`)
+        return
+      }
+
+      const [drawnCard] = drawResult.drawnCards
+      const nextPlayers = players.map((player, index) =>
+        index === currentPlayerIndex
+          ? {
+              ...player,
+              hand: [...player.hand, drawnCard],
+            }
+          : player,
+      )
+
+      setPlayers(nextPlayers)
+      setDrawPile(drawResult.drawPile)
+      setDiscardPile(drawResult.discardPile)
+      setHasDrawnThisTurn(true)
+      setDrawnCardId(drawnCard.id)
+      setAwaitingEndTurnReason(null)
+      setPendingWildCardId(null)
+
+      const updatedHand = nextPlayers[currentPlayerIndex].hand
+      const isPlayable = isPlayableCard(drawnCard, topDiscard, activeColor, updatedHand)
+
+      if (!isPlayable) {
+        setAwaitingEndTurnReason("drawBlocked")
+        setTurnMessage(`${activePlayer.name} drew ${getCardTitle(drawnCard)} and cannot play it. End the turn to continue.`)
+        return
+      }
+
+      setTurnMessage(`${activePlayer.name} drew a playable card. Play it now or end the turn.`)
+      return
+    }
+
+    if (pendingAction.kind === "playCard" && pendingAction.cardId) {
+      resolvePlayedCard(pendingAction.cardId, pendingAction.chosenColor ?? undefined)
+      return
+    }
+
+    if (pendingAction.kind === "endTurn") {
+      if (!hasDrawnThisTurn && !awaitingEndTurnReason && !pendingTurnState) {
+        return
+      }
+
+      if (pendingTurnState) {
+        commitNextTurn({
+          players,
+          drawPile,
+          discardPile,
+          currentPlayerIndex: pendingTurnState.currentPlayerIndex,
+          direction: pendingTurnState.direction,
+          activeColor: pendingTurnState.activeColor,
+          message: pendingTurnState.message,
+        })
+        return
+      }
+
+      const nextPlayerIndex = getNextPlayerIndex(players.length, currentPlayerIndex, direction, 1)
+      const message =
+        awaitingEndTurnReason === "timeout"
+          ? `${activePlayer.name} ran out of time and ended the turn.`
+          : awaitingEndTurnReason === "noDraw"
+            ? `${activePlayer.name} had no card to draw and ended the turn.`
+            : awaitingEndTurnReason === "drawBlocked"
+              ? `${activePlayer.name} could not play the drawn card and ended the turn.`
+              : `${activePlayer.name} kept the drawn card and ended the turn.`
+
+      commitNextTurn({
+        players,
+        drawPile,
+        discardPile,
+        currentPlayerIndex: nextPlayerIndex,
+        direction,
+        activeColor,
+        message,
+      })
+    }
+  }, [
+    activeColor,
+    activePlayer,
+    awaitingEndTurnReason,
+    commitNextTurn,
+    currentPlayerIndex,
+    direction,
+    discardPile,
+    drawPile,
+    hasDrawnThisTurn,
+    pendingTurnState,
+    phase,
+    players,
+    resolvePlayedCard,
+    room.role,
+    room.roomState?.pendingAction,
+    topDiscard,
+  ])
+
   const handleCardSelection = (card: UnoCard) => {
-    if (isAwaitingEndTurn) {
+    if (guestActionPending || isAwaitingEndTurn || !isMyTurn) {
+      return
+    }
+
+    if (playMode === "guest") {
+      if (card.kind === "wild" || card.kind === "wildDrawFour") {
+        setPendingWildCardId(card.id)
+        return
+      }
+
+      setGuestActionPending(true)
+      setSubmittedActionStateKey(roomActionStateKey)
+      room.submitAction("playCard", card.id)
       return
     }
 
@@ -698,7 +1100,14 @@ export default function Uno() {
   }
 
   const handleDrawCard = useCallback(() => {
-    if (phase !== "playing" || !activePlayer || hasDrawnThisTurn || isAwaitingEndTurn) {
+    if (guestActionPending || !isMyTurn || phase !== "playing" || !activePlayer || hasDrawnThisTurn || isAwaitingEndTurn) {
+      return
+    }
+
+    if (playMode === "guest") {
+      setGuestActionPending(true)
+      setSubmittedActionStateKey(roomActionStateKey)
+      room.submitAction("drawCard")
       return
     }
 
@@ -740,10 +1149,17 @@ export default function Uno() {
     }
 
     setTurnMessage(`${activePlayer.name} drew a playable card. Play it now or end the turn.`)
-  }, [phase, activePlayer, hasDrawnThisTurn, isAwaitingEndTurn, drawPile, discardPile, players, currentPlayerIndex, direction, activeColor, topDiscard])
+  }, [activeColor, activePlayer, currentPlayerIndex, discardPile, drawPile, guestActionPending, hasDrawnThisTurn, isAwaitingEndTurn, isMyTurn, phase, playMode, players, room.submitAction, roomActionStateKey, topDiscard])
 
   const handleEndTurn = useCallback(() => {
-    if (phase !== "playing" || !activePlayer || (!hasDrawnThisTurn && !awaitingEndTurnReason && !pendingTurnState)) {
+    if (guestActionPending || !isMyTurn || phase !== "playing" || !activePlayer || (!hasDrawnThisTurn && !awaitingEndTurnReason && !pendingTurnState)) {
+      return
+    }
+
+    if (playMode === "guest") {
+      setGuestActionPending(true)
+      setSubmittedActionStateKey(roomActionStateKey)
+      room.submitAction("endTurn")
       return
     }
 
@@ -785,6 +1201,7 @@ export default function Uno() {
     hasDrawnThisTurn,
     awaitingEndTurnReason,
     pendingTurnState,
+    guestActionPending,
     players,
     drawPile,
     discardPile,
@@ -792,6 +1209,10 @@ export default function Uno() {
     direction,
     activeColor,
     commitNextTurn,
+    isMyTurn,
+    playMode,
+    room.submitAction,
+    roomActionStateKey,
   ])
 
   const handleTimeout = useCallback(() => {
@@ -799,13 +1220,38 @@ export default function Uno() {
       return
     }
 
-    setAwaitingEndTurnReason("timeout")
     setPendingWildCardId(null)
-    setTurnMessage(`${activePlayer.name}'s timer expired. End the turn to continue.`)
-  }, [phase, activePlayer, awaitingEndTurnReason, pendingTurnState])
+    const nextPlayerIndex = getNextPlayerIndex(players.length, currentPlayerIndex, direction, 1)
+    const message = hasDrawnThisTurn
+      ? `${activePlayer.name} ran out of time and kept the drawn card.`
+      : `${activePlayer.name} ran out of time and ended the turn.`
+
+    commitNextTurn({
+      players,
+      drawPile,
+      discardPile,
+      currentPlayerIndex: nextPlayerIndex,
+      direction,
+      activeColor,
+      message,
+    })
+  }, [
+    activeColor,
+    activePlayer,
+    awaitingEndTurnReason,
+    commitNextTurn,
+    currentPlayerIndex,
+    direction,
+    discardPile,
+    drawPile,
+    hasDrawnThisTurn,
+    pendingTurnState,
+    phase,
+    players,
+  ])
 
   useEffect(() => {
-    if (phase !== "playing" || awaitingEndTurnReason || pendingTurnState) {
+    if (phase !== "playing" || playMode === "guest" || awaitingEndTurnReason || pendingTurnState) {
       return
     }
 
@@ -819,10 +1265,10 @@ export default function Uno() {
     }, 1000)
 
     return () => window.clearTimeout(timeoutId)
-  }, [phase, secondsLeft, awaitingEndTurnReason, pendingTurnState, handleTimeout])
+  }, [handleTimeout, awaitingEndTurnReason, pendingTurnState, phase, playMode, secondsLeft])
 
   const canPlayCardFromHand = (card: UnoCard) => {
-    if (!activePlayer || phase !== "playing" || isAwaitingEndTurn) {
+    if (!visiblePlayer || guestActionPending || !isMyTurn || phase !== "playing" || isAwaitingEndTurn) {
       return false
     }
 
@@ -830,11 +1276,77 @@ export default function Uno() {
       return false
     }
 
-    return isPlayableCard(card, topDiscard, activeColor, activePlayer.hand)
+    return isPlayableCard(card, topDiscard, activeColor, visibleHand)
+  }
+
+  const createHostInvite = () => {
+    const trimmedHostName = hostName.trim()
+
+    if (!trimmedHostName) {
+      setSetupError("Enter your host player name before creating an invite code.")
+      return
+    }
+
+    setSetupError("")
+    setPlayMode("host")
+    setLocalPlayerId(HOST_PLAYER_ID)
+
+    if (room.role !== "none") {
+      room.leaveRoom()
+    }
+
+    room.createRoom(trimmedHostName, MAX_PLAYERS)
+    setHostStatus("Creating room code...")
+  }
+
+  const joinHostedMatch = () => {
+    const trimmedJoinName = joinName.trim()
+
+    if (!trimmedJoinName) {
+      setSetupError("Enter your player name before joining a hosted match.")
+      return
+    }
+
+    if (!joinHostCode.trim()) {
+      setSetupError("Enter the host room code before joining the lobby.")
+      return
+    }
+
+    setSetupError("")
+
+    if (room.role !== "none") {
+      room.leaveRoom()
+    }
+
+    room.joinRoom(joinHostCode, trimmedJoinName)
+    setJoinStatus("Joining the host lobby...")
+  }
+
+  const handleWildColorSelection = (color: PlayableColor) => {
+    if (!pendingWildCardId || guestActionPending || !isMyTurn) {
+      return
+    }
+
+    if (playMode === "guest") {
+      setGuestActionPending(true)
+      setSubmittedActionStateKey(roomActionStateKey)
+      room.submitAction("playCard", pendingWildCardId, color)
+      setPendingWildCardId(null)
+      return
+    }
+
+    resolvePlayedCard(pendingWildCardId, color)
   }
 
   const winner = players.find((player) => player.id === winnerId) ?? null
   const activeTableViewportHeight = "calc(100dvh - 11rem)"
+  const connectionLabel = setupMode === "local" ? "Same device" : "Shared WebSocket room code"
+  const tableModeLabel =
+    playMode === "local" ? "Same-device mode" : playMode === "host" ? "Hosted room" : "Joined room"
+  const handDescription =
+    playMode === "local"
+      ? `${activePlayer?.name ?? "Player"}'s cards`
+      : `${localPlayer?.name ?? "You"}'s cards`
 
   return (
     <div className={`${phase === "setup" ? "space-y-8" : "space-y-4"} text-white`}>
@@ -861,9 +1373,7 @@ export default function Uno() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Connection</p>
-                <p className="mt-2 text-lg font-semibold">
-                  {setupMode === "local" ? "Same device" : "Network multiplayer coming soon"}
-                </p>
+                <p className="mt-2 text-lg font-semibold">{connectionLabel}</p>
               </div>
             </div>
           </div>
@@ -878,7 +1388,7 @@ export default function Uno() {
 
             <div className="flex flex-wrap gap-3 text-sm font-semibold">
               <span className="rounded-full border border-white/10 bg-white/8 px-4 py-2 text-blue-100">
-                Same-device mode
+                {tableModeLabel}
               </span>
               <span className="rounded-full border border-white/10 bg-white/8 px-4 py-2 text-blue-100">
                 30-second turns
@@ -1015,50 +1525,106 @@ export default function Uno() {
             <h2 className="mt-2 text-3xl font-bold">Host a game</h2>
 
             <div className="mt-6 space-y-5">
-              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/80">
-                Network multiplayer is intentionally not implemented yet, but this entry point stays
-                visible so UNO matches the same setup language as Trivia.
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Host player name
+                </label>
+                <input
+                  value={hostName}
+                  onChange={(event) => setHostName(event.target.value)}
+                  placeholder="Enter your name as the host"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.25em] text-cyan-100">Connected players</p>
+                    <p className="mt-2 text-blue-100/75">
+                      Generate a room code, share it with guests, and wait for them to join.
+                    </p>
+                  </div>
+                  <div className="rounded-full bg-yellow-300 px-4 py-2 text-sm font-black text-blue-950">
+                    {lobbyPlayers.length}
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {lobbyPlayers.length === 0 ? (
+                    <p className="rounded-2xl bg-blue-900/60 px-4 py-3 text-blue-100/80">No lobby players yet.</p>
+                  ) : (
+                    lobbyPlayers.map((player) => (
+                      <div key={player.id} className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3">
+                        <span>{player.name}</span>
+                        <span className="text-xs uppercase tracking-[0.25em] text-cyan-100">
+                          {player.id === HOST_PLAYER_ID ? "Host" : "Guest"}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               <button
                 type="button"
-                disabled
-                className="w-full rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 opacity-60"
+                onClick={createHostInvite}
+                className="w-full rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 transition hover:bg-cyan-300"
               >
-                Generate room code
+                {room.roomState?.roomCode ? "Generate new room code" : "Generate room code"}
               </button>
 
-              <textarea
-                disabled
-                placeholder="Future guest response codes will appear here"
-                className="min-h-28 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-white outline-none placeholder:text-blue-200/45 opacity-60"
-              />
+              {room.roomState?.roomCode && (
+                <textarea
+                  readOnly
+                  value={room.roomState.roomCode}
+                  className="min-h-28 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-center text-lg font-black tracking-[0.35em] text-white outline-none"
+                />
+              )}
 
-              <button
-                type="button"
-                disabled
-                className="w-full rounded-full border border-white/20 px-5 py-3 font-semibold text-white opacity-60"
-              >
-                Apply guest response code
-              </button>
+              {hostStatus && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  {hostStatus}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
-            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Hosted preview</p>
-            <h2 className="mt-2 text-3xl font-bold">Future room flow</h2>
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Hosted rules</p>
+            <h2 className="mt-2 text-3xl font-bold">Classic remote UNO</h2>
 
-            <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
-              <p>
-                The local pass-and-play mode is fully implemented first. When remote play is ready,
-                this panel can mirror the same manual host-code workflow used by Trivia.
-              </p>
+            <div className="mt-6 space-y-5 text-sm text-blue-100/85">
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">Hosted match flow</p>
+                <ul className="mt-3 space-y-2">
+                  <li>The host manages the deck and broadcasts every turn to connected devices.</li>
+                  <li>Guests play only from their own device when it is their turn.</li>
+                  <li>Classic rules stay locked in for every hosted room.</li>
+                </ul>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">Room setup</p>
+                <ul className="mt-3 space-y-2">
+                  <li>2 to 6 players total.</li>
+                  <li>30-second turns with auto timeout.</li>
+                  <li>One room code powers the whole table, similar to Trivia.</li>
+                </ul>
+              </div>
             </div>
+
+            {setupError && (
+              <div className="mt-6 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {setupError}
+              </div>
+            )}
 
             <button
               type="button"
-              disabled
-              className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 opacity-60"
+              onClick={startHostedMatch}
+              disabled={lobbyPlayers.length < 2 || room.role !== "host"}
+              className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Start hosted game
             </button>
@@ -1073,43 +1639,72 @@ export default function Uno() {
             <h2 className="mt-2 text-3xl font-bold">Join a hosted game</h2>
 
             <div className="mt-6 space-y-5">
-              <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/80">
-                Join controls are shown here for parity with Trivia, but same-device play is the
-                only finished UNO mode right now.
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Player name
+                </label>
+                <input
+                  value={joinName}
+                  onChange={(event) => setJoinName(event.target.value)}
+                  placeholder="Enter your player name"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
+                  Room code
+                </label>
+                <input
+                  value={joinHostCode}
+                  onChange={(event) => setJoinHostCode(event.target.value.toUpperCase())}
+                  placeholder="Enter the host room code"
+                  maxLength={6}
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-center font-mono tracking-[0.35em] text-white uppercase outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
+                />
               </div>
 
               <button
                 type="button"
-                disabled
-                className="w-full rounded-full bg-cyan-400 px-5 py-3 font-semibold text-blue-950 opacity-60"
+                onClick={joinHostedMatch}
+                className="w-full rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
               >
-                Enter room code
+                Join lobby
               </button>
 
-              <button
-                type="button"
-                disabled
-                className="w-full rounded-full border border-white/20 px-5 py-3 font-semibold text-white opacity-60"
-              >
-                Generate response code
-              </button>
-
-              <textarea
-                disabled
-                placeholder="Your future join response code will appear here"
-                className="min-h-40 w-full rounded-3xl border border-white/10 bg-blue-900/70 p-4 text-sm text-blue-50 outline-none placeholder:text-blue-200/45 opacity-60"
-              />
+              {joinStatus && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
+                  {joinStatus}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
-            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Lobby preview</p>
-            <h2 className="mt-2 text-3xl font-bold">Remote lobby placeholder</h2>
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Connected lobby</p>
+            <h2 className="mt-2 text-3xl font-bold">Room preview</h2>
+
+            <div className="mt-6 space-y-4">
+              {lobbyPlayers.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-blue-100/80">
+                  Enter the host room code, join the lobby, and wait for the match to begin.
+                </p>
+              ) : (
+                lobbyPlayers.map((player) => (
+                  <div key={player.id} className="flex items-center justify-between rounded-2xl bg-blue-900/60 px-4 py-3">
+                    <span>{player.name}</span>
+                    <span className="text-xs uppercase tracking-[0.25em] text-cyan-100">
+                      {player.id === HOST_PLAYER_ID ? "Host" : "Player"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
 
             <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-5 text-blue-100/85">
               <p>
-                For now, switch back to <span className="font-semibold text-white">Local Multiplayer</span>{" "}
-                to play the full same-device version with hidden hands and timed turns.
+                Hosted UNO uses the same room-code pattern as Trivia: the host shares one code,
+                everyone joins, and turns are synchronized live over the socket.
               </p>
             </div>
           </div>
@@ -1173,7 +1768,7 @@ export default function Uno() {
                             UNO
                           </span>
                         )}
-                        {isActive && phase === "playing" && (
+                        {isActive && phase === "playing" && playMode === "local" && (
                           <span className="rounded-full bg-blue-500/70 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white">
                             Device holder
                           </span>
@@ -1202,7 +1797,7 @@ export default function Uno() {
                 <button
                   type="button"
                   onClick={handleDrawCard}
-                  disabled={phase !== "playing" || hasDrawnThisTurn || !activePlayer || isAwaitingEndTurn}
+                  disabled={phase !== "playing" || guestActionPending || hasDrawnThisTurn || !isMyTurn || isAwaitingEndTurn}
                   className="mt-4 flex h-40 w-full items-center justify-center rounded-[1.5rem] border border-white/15 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 text-center transition hover:-translate-y-1 hover:border-yellow-200/40 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div>
@@ -1245,18 +1840,20 @@ export default function Uno() {
                 </ul>
               </section>
 
-              {phase === "playing" && activePlayer && (
+              {phase === "playing" && visiblePlayer && (
                 <section className="flex min-h-0 max-h-[28vh] flex-col overflow-hidden rounded-[2rem] border border-white/15 bg-slate-950/85 p-3 shadow-xl shadow-black/25 sm:max-h-[30vh]">
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <p className={`text-sm font-semibold uppercase tracking-[0.35em] ${getColorAccent(activeColor)}`}>
                         Hand view
                       </p>
-                      <h3 className="mt-1 text-xl font-black sm:text-2xl">{activePlayer.name}'s cards</h3>
+                      <h3 className="mt-1 text-xl font-black sm:text-2xl">{handDescription}</h3>
                       <p className="mt-1 text-sm text-blue-100/75">
-                        {playableCards.length > 0
+                        {isMyTurn && playableCards.length > 0
                           ? `${playableCards.length} playable card${playableCards.length === 1 ? "" : "s"} available this turn.`
-                          : "No playable cards in hand yet. Draw once or let the timer run out."}
+                          : isMyTurn
+                            ? "No playable cards in hand yet. Draw once or let the timer run out."
+                            : `Waiting for ${activePlayer?.name ?? "the active player"} to finish the turn.`}
                       </p>
                     </div>
 
@@ -1264,7 +1861,7 @@ export default function Uno() {
                       <button
                         type="button"
                         onClick={handleDrawCard}
-                        disabled={hasDrawnThisTurn || isAwaitingEndTurn}
+                        disabled={guestActionPending || !isMyTurn || hasDrawnThisTurn || isAwaitingEndTurn}
                         className="rounded-full bg-yellow-300 px-5 py-3 font-semibold text-slate-900 transition hover:bg-yellow-200 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Draw card
@@ -1272,7 +1869,7 @@ export default function Uno() {
                       <button
                         type="button"
                         onClick={handleEndTurn}
-                        disabled={!hasDrawnThisTurn && !awaitingEndTurnReason && !pendingTurnState}
+                        disabled={guestActionPending || !isMyTurn || (!hasDrawnThisTurn && !awaitingEndTurnReason && !pendingTurnState)}
                         className="rounded-full border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         End turn
@@ -1282,7 +1879,7 @@ export default function Uno() {
 
                   <div className="mt-2 flex-1 min-h-0 overflow-hidden">
                     <div className="flex h-full items-end gap-1.5 overflow-x-auto overflow-y-hidden pb-1 pr-1">
-                      {currentPlayerHand.map((card) => {
+                      {visibleHand.map((card) => {
                         const isPlayable = canPlayCardFromHand(card)
                         const isPendingWild = pendingWildCardId === card.id
                         const isFreshDraw = drawnCardId === card.id
@@ -1342,19 +1939,21 @@ export default function Uno() {
                   </p>
 
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                    {playMode === "local" && (
+                      <button
+                        type="button"
+                        onClick={startLocalMatch}
+                        className="rounded-full bg-yellow-300 px-6 py-3 font-bold text-slate-900 transition hover:bg-yellow-200"
+                      >
+                        Shuffle rematch
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={startLocalMatch}
-                      className="rounded-full bg-yellow-300 px-6 py-3 font-bold text-slate-900 transition hover:bg-yellow-200"
-                    >
-                      Shuffle rematch
-                    </button>
-                    <button
-                      type="button"
-                      onClick={resetToSetup}
+                      onClick={() => resetToSetup(setupMode)}
                       className="rounded-full border border-white/20 px-6 py-3 font-bold text-white transition hover:bg-white/10"
                     >
-                      Back to setup
+                      {playMode === "local" ? "Back to setup" : "Leave room"}
                     </button>
                   </div>
                 </section>
@@ -1365,7 +1964,7 @@ export default function Uno() {
       )}
 
       <AnimatePresence>
-        {phase === "handoff" && activePlayer && (
+        {playMode === "local" && phase === "handoff" && activePlayer && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1482,7 +2081,7 @@ export default function Uno() {
                   <button
                     key={color}
                     type="button"
-                    onClick={() => resolvePlayedCard(pendingWildCardId, color)}
+                    onClick={() => handleWildColorSelection(color)}
                     className={`rounded-[1.5rem] border border-white/15 px-5 py-6 text-left text-white shadow-lg transition hover:-translate-y-1 ${getCardBackground({
                       id: color,
                       color,
