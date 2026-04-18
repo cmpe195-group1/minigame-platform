@@ -3,6 +3,7 @@ package cmpe195.group1.minigameplatform.games.anagrams.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class GameSettings {
         private int letterCount = 8;
         private int minimumWordLength = 3;
@@ -43,6 +45,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class SubmittedWord {
         private String value;
         private int points;
@@ -50,6 +53,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class PlayerRecord {
         private String id;
         private String name;
@@ -60,6 +64,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class BroadcastGameState {
         private String phase;
         private List<PlayerRecord> players = new ArrayList<>();
@@ -73,6 +78,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class PendingAction {
         private long submissionId;
         private String playerId;

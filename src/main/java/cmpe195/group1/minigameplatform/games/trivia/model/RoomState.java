@@ -38,6 +38,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class GameSettings {
         private String category = "";
         private String difficulty = "";
@@ -48,6 +49,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class PlayerRecord {
         private String id;
         private String name;
@@ -57,6 +59,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class ActiveQuestion {
         private String category;
         private String difficulty;
@@ -68,6 +71,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class RevealState {
         private String selectedAnswer;
         private boolean correct;
@@ -76,6 +80,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class BroadcastGameState {
         private String phase;
         private List<PlayerRecord> players = new ArrayList<>();
@@ -90,6 +95,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class PendingAnswer {
         private long submissionId;
         private String playerId;

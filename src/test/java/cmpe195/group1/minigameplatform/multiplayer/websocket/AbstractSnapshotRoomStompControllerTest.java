@@ -44,6 +44,7 @@ class AbstractSnapshotRoomStompControllerTest {
 
         controller.create(request, headers("session-1"));
         controller.create(requestWithToken("client-1"), null);
+        controller.create(null, headers("session-2"));
 
         verifyNoInteractions(roomService, messagingTemplate);
         assertThat(sessionRegistry.getClientToken("session-1")).isNull();
@@ -86,6 +87,7 @@ class AbstractSnapshotRoomStompControllerTest {
 
         controller.join(request, headers("session-1"));
         controller.join(joinRequest("client-1"), null);
+        controller.join(null, headers("session-2"));
 
         verifyNoInteractions(roomService, messagingTemplate);
     }
@@ -148,8 +150,18 @@ class AbstractSnapshotRoomStompControllerTest {
     @Test
     void handleLeaveRoom_requiresBoundClientSession() {
         controller.leave(new RoomScopedPayload.RoomCodeRequest(), headers("session-1"));
+        controller.leave(null, headers("session-2"));
 
         verifyNoInteractions(roomService, messagingTemplate);
+    }
+
+    @Test
+    void rememberAndClearRoomCode_ignoreNullSessionIds() {
+        controller.remember(null, "ROOM1");
+        controller.clear(null);
+
+        assertThat(sessionRegistry.getClientToken("missing")).isNull();
+        verifyNoInteractions(messagingTemplate, roomService);
     }
 
     @Test
@@ -166,6 +178,19 @@ class AbstractSnapshotRoomStompControllerTest {
         assertThat(info.getRoomCode()).isNull();
         verify(roomService).disconnect("client-1", "room-from-id");
         verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    void handleLeaveRoom_usesNullRoomCodeWhenPayloadIsMissingForBoundSession() {
+        sessionRegistry.bindClient("session-2", "client-2");
+        sessionRegistry.setRoomCode("session-2", "OLD");
+        when(roomService.disconnect("client-2", null)).thenReturn(null);
+
+        controller.leave(null, headers("session-2"));
+
+        StompSessionRegistry.SessionInfo info = sessionRegistry.remove("session-2");
+        assertThat(info.getRoomCode()).isNull();
+        verify(roomService).disconnect("client-2", null);
     }
 
     @Test
@@ -300,6 +325,18 @@ class AbstractSnapshotRoomStompControllerTest {
         verifyRoomStateMessageSent("/topic/test-game/room/ROOM1", "ROOM_STATE", "room-1", null);
     }
 
+    @Test
+    void handleDisconnect_stopsWhenServiceReturnsNullForCompleteSession() {
+        sessionRegistry.bindClient("session-3", "client-3");
+        sessionRegistry.setRoomCode("session-3", "ROOM3");
+        when(roomService.disconnect("client-3", "ROOM3")).thenReturn(null);
+
+        controller.disconnect(disconnectEvent("session-3"));
+
+        verify(roomService).disconnect("client-3", "ROOM3");
+        verifyNoInteractions(messagingTemplate);
+    }
+
     private SimpMessageHeaderAccessor headers(String sessionId) {
         SimpMessageHeaderAccessor headers = mock(SimpMessageHeaderAccessor.class);
         when(headers.getSessionId()).thenReturn(sessionId);
@@ -410,6 +447,14 @@ class AbstractSnapshotRoomStompControllerTest {
 
         private void disconnect(SessionDisconnectEvent event) {
             handleDisconnect(event);
+        }
+
+        private void remember(String sessionId, String roomCode) {
+            rememberRoomCode(sessionId, roomCode);
+        }
+
+        private void clear(String sessionId) {
+            clearRoomCode(sessionId);
         }
     }
 }

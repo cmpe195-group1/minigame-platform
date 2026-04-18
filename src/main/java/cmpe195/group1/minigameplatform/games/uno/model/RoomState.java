@@ -3,6 +3,7 @@ package cmpe195.group1.minigameplatform.games.uno.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class GameSettings {
         private int turnSeconds = 30;
         private int startingHandSize = 7;
@@ -43,6 +45,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class UnoCard {
         private String id;
         private String color;
@@ -52,6 +55,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class PlayerState {
         private String id;
         private String name;
@@ -60,6 +64,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class PendingTurnState {
         private int currentPlayerIndex;
         private int direction;
@@ -69,6 +74,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class BroadcastGameState {
         private String phase;
         private List<PlayerState> players = new ArrayList<>();
@@ -89,6 +95,7 @@ public class RoomState {
 
     @Setter
     @Getter
+    @NoArgsConstructor
     public static class PendingAction {
         private long actionId;
         private String playerId;
