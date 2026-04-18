@@ -60,14 +60,13 @@ export function App() {
               <Route path="/games/sudoku" element={<SudokuPage />} />
               <Route path="/games/archery" element={<ArcheryPage />} />
               <Route path="/games/battleship" element={<BattleshipPage />} />
-              <Route path="games/chess" element={<ChessGameWrapper />} />
+              <Route path="games/chess" element={<ChessPage />} />
               <Route path="games/knockout" element={<KnockoutGameWrapper />} />
               <Route path="/games/checkers" element={<CheckersPage />} />
               <Route path="/games/search" element={<Search />} />
               <Route path="/games/trivia" element={<Trivia/>} />
               <Route path="/games/anagrams" element={<Anagrams />} />
               <Route path="/games/uno" element={<Uno />} />
-              <Route path="/test/chess" element={<ChessPage/>}/>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
