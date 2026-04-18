@@ -10,48 +10,53 @@ export default function CardGrid() {
   // Static UI-only example cards
     const games = [
         {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
+            "title":"Archery",
+            "thumbnail":"game_archery.png",
+            "genre": ["sport"]
         },
         {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
+            "title":"Sudoku",
+            "thumbnail":"game_sudoku.png",
+            "genre": ["puzzle"]
         },
         {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
-        },{
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
+            "title":"Battleship",
+            "thumbnail":"game_battleship.png",
+            "genre":["strategy"]
         },
         {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
+          "title":"Chess",
+          "thumbnail":"game_chess.jpg",
+          "genre": ["strategy"]
         },
         {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
+          "title": "Knockout",
+          "thumbnail": "game_knockout.png",
+          "genre": ["action", "local"],
+          "fitWhole": true
         },
         {
-            "title":"snake",
-            "thumbnail":"game_snake.jfif",
-            "genre": ["arcade"]
+          "title":"Checkers",
+          "thumbnail":"game_checkers.png",
+          "genre": ["strategy"],
+           "fitWhole": true
         },
         {
-            "title":"csgo",
-            "thumbnail":"game_csgo.jpg",
-            "genre": ["fps", "action"]
+            "title":"Anagrams",
+            "thumbnail":"anagrams.webp",
+            "genre": ["word", "puzzle", "local"]
         },
         {
-            "title":"tetris",
-            "thumbnail":"game_tetris.png",
-            "genre":["puzzle"]
+            "title":"Trivia",
+            "thumbnail":"trivia.png",
+            "genre": ["trivia", "quiz", "local"],
+            "fitWhole": true
+        },
+        {
+            "title":"Uno",
+            "thumbnail":"uno.webp",
+            "genre": ["local"],
+            "fitWhole": true
         }
     ];
 

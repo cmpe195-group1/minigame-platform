@@ -56,21 +56,21 @@ interface NavBarProps {
 }
 
 const Navbar = ({ onClose }: NavBarProps) => {
-  const menuItems = ["HOME", "ALL GAMES", "PUZZLE", "CHESS", "SPORT"];
+  const menuItems = ["HOME", "ALL GAMES", "WORD", "TRIVIA", "LOCAL"];
   const [searchParams, setSearchParams] = useSearchParams();
 
   const handleCategoryClick = (item: string) => {
     let category = null;
 
     switch (item.toLowerCase()) {
-      case "puzzle":
-        category = "puzzle";
+      case "word":
+        category = "word";
         break;
-      case "chess":
-        category = "chess";
+      case "trivia":
+        category = "trivia";
         break;
-      case "sport":
-        category = "sport";
+      case "local":
+        category = "local";
         break;
       case "all games":
       case "home":

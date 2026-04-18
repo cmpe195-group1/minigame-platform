@@ -1,3 +1,10 @@
+
+import SudokuPage from "@/pages/SudokuPage";
+import ArcheryPage from "@/pages/ArcheryPage";
+import BattleshipPage from "@/pages/BattleshipPage";
+import ChessGameWrapper from "./games/chess/ChessGameWrapper";
+import KnockoutGameWrapper from "./games/knockout/KnockoutGameWrapper";
+import CheckersPage from "./pages/CheckersPage"
 import {StrictMode, useEffect} from "react"
 import {createRoot} from "react-dom/client"
 import {BrowserRouter, Navigate, Outlet, Route, Routes} from "react-router"
@@ -8,7 +15,12 @@ import Games from "@/pages/Games"
 import Search from "@/pages/Search"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
-import {type AuthSnapshot, signOutUser, startAuthListener, useAuthSnapshot} from "@/auth"
+import Trivia from "@/games/trivia/Trivia.tsx"
+import Anagrams from "@/games/anagrams/Anagrams.tsx"
+import Uno from "@/games/uno/Uno.tsx";
+import {type AuthSnapshot, signOutUser, startAuthListener, useAuthSnapshot} from "@/auth";
+
+import ChessPage from "./pages/ChessPage";
 
 function RequireAuth({ auth }: { auth: AuthSnapshot }) {
   if (auth.initializing) {
@@ -45,6 +57,17 @@ export function App() {
               <Route path="/" element={<Home />} />
               <Route path="/games" element={<Games />} />
               <Route path="/games/search" element={<Search />} />
+              <Route path="/games/sudoku" element={<SudokuPage />} />
+              <Route path="/games/archery" element={<ArcheryPage />} />
+              <Route path="/games/battleship" element={<BattleshipPage />} />
+              <Route path="games/chess" element={<ChessGameWrapper />} />
+              <Route path="games/knockout" element={<KnockoutGameWrapper />} />
+              <Route path="/games/checkers" element={<CheckersPage />} />
+              <Route path="/games/search" element={<Search />} />
+              <Route path="/games/trivia" element={<Trivia/>} />
+              <Route path="/games/anagrams" element={<Anagrams />} />
+              <Route path="/games/uno" element={<Uno />} />
+              <Route path="/test/chess" element={<ChessPage/>}/>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
