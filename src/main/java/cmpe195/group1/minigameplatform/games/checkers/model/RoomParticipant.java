@@ -12,6 +12,4 @@ public class RoomParticipant {
     private String name;
     private String clientId;
     private String pieceColor;
-
-
 }

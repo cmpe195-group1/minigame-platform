@@ -11,5 +11,4 @@ public class CheckersGameState {
     private List<List<CheckersPiece>> board;
     private String turn;
     private CheckersPosition selected;
-
 }

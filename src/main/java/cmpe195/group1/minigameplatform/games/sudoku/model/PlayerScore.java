@@ -13,6 +13,4 @@ public class PlayerScore {
     private String color;
     private String colorName;
     private int score;
-
-
 }

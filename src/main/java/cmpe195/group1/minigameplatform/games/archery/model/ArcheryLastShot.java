@@ -14,6 +14,4 @@ public class ArcheryLastShot {
     private double dist;
     private double impactX;
     private double impactY;
-
-
 }

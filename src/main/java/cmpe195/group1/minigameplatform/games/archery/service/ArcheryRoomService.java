@@ -6,7 +6,7 @@ import cmpe195.group1.minigameplatform.games.archery.model.ArcheryRoomPlayer;
 import cmpe195.group1.minigameplatform.games.archery.model.ArcheryRoomState;
 import cmpe195.group1.minigameplatform.games.archery.payload.ArcheryArrowShotPayload;
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.RoomScopedPayload;
 import cmpe195.group1.minigameplatform.multiplayer.service.RoomActionResult;
 import cmpe195.group1.minigameplatform.multiplayer.service.SnapshotRoomService;
 import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
@@ -77,7 +77,7 @@ public class ArcheryRoomService implements SnapshotRoomService<ArcheryRoomState>
     }
 
     @Override
-    public RoomActionResult<ArcheryRoomState> joinRoom(String clientId, JoinRoomRequest payload) {
+    public RoomActionResult<ArcheryRoomState> joinRoom(String clientId, RoomScopedPayload.JoinRoomRequest payload) {
         String roomId = payload != null ? RoomCodeUtils.normalize(payload.resolveRoomCode()) : "";
         ArcheryRoomState room = rooms.get(roomId);
         if (room == null) {

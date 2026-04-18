@@ -10,6 +10,4 @@ import lombok.Setter;
 public class CheckersPiece {
     private String color;
     private boolean king;
-
-
 }

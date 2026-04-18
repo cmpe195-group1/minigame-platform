@@ -1,13 +1,12 @@
 package cmpe195.group1.minigameplatform.games.sudoku.service;
 
-import cmpe195.group1.minigameplatform.games.sudoku.model.ColorProfile;
 import cmpe195.group1.minigameplatform.games.sudoku.model.PlayerScore;
 import cmpe195.group1.minigameplatform.games.sudoku.model.RoomParticipant;
 import cmpe195.group1.minigameplatform.games.sudoku.model.RoomState;
 import cmpe195.group1.minigameplatform.games.sudoku.model.SudokuCell;
 import cmpe195.group1.minigameplatform.games.sudoku.payload.MakeMovePayload;
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.RoomScopedPayload;
 import cmpe195.group1.minigameplatform.multiplayer.service.RoomActionResult;
 import cmpe195.group1.minigameplatform.multiplayer.service.SnapshotRoomService;
 import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
@@ -26,6 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class RoomService implements SnapshotRoomService<RoomState> {
+
+    private record ColorProfile(String color, String colorName) {}
 
     private static final List<ColorProfile> COLORS = List.of(
         new ColorProfile("#3B82F6", "Blue"),
@@ -88,7 +89,7 @@ public class RoomService implements SnapshotRoomService<RoomState> {
     }
 
     @Override
-    public RoomActionResult<RoomState> joinRoom(String clientId, JoinRoomRequest payload) {
+    public RoomActionResult<RoomState> joinRoom(String clientId, RoomScopedPayload.JoinRoomRequest payload) {
         String code = payload != null && payload.resolveRoomCode() != null
             ? RoomCodeUtils.normalize(payload.resolveRoomCode())
             : "";

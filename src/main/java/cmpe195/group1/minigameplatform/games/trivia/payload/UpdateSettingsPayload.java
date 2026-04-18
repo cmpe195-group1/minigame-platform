@@ -9,6 +9,5 @@ import lombok.Setter;
 @Getter
 public class UpdateSettingsPayload extends RoomScopedPayload {
     private RoomState.GameSettings settings;
-
 }
 

@@ -15,6 +15,4 @@ public class SudokuCell {
     private Integer playerId;
     private Boolean isCorrect;
     private int solvedValue;
-
-
 }

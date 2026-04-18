@@ -7,8 +7,7 @@ import cmpe195.group1.minigameplatform.games.anagrams.payload.SubmitWordPayload;
 import cmpe195.group1.minigameplatform.games.anagrams.payload.UpdateSettingsPayload;
 import cmpe195.group1.minigameplatform.games.anagrams.service.RoomService;
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.RoomCodeRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.RoomScopedPayload;
 import cmpe195.group1.minigameplatform.multiplayer.websocket.AbstractSnapshotRoomStompController;
 import cmpe195.group1.minigameplatform.multiplayer.websocket.StompSessionRegistry;
 import org.springframework.context.event.EventListener;
@@ -38,7 +37,7 @@ public class AnagramsStompController extends AbstractSnapshotRoomStompController
     }
 
     @MessageMapping("/anagrams/join")
-    public void joinRoom(JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
+    public void joinRoom(RoomScopedPayload.JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
         handleJoinRoom(payload, headers);
     }
 
@@ -63,7 +62,7 @@ public class AnagramsStompController extends AbstractSnapshotRoomStompController
     }
 
     @MessageMapping("/anagrams/leave")
-    public void leaveRoom(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void leaveRoom(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleLeaveRoom(payload, headers);
     }
 

@@ -11,5 +11,4 @@ public class MakeMovePayload {
     private int col;
     private int num;
     private int playerId;
-
 }

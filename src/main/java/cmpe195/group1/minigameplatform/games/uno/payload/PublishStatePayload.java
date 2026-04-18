@@ -9,6 +9,5 @@ import lombok.Setter;
 @Getter
 public class PublishStatePayload extends RoomScopedPayload {
     private RoomState.BroadcastGameState gameState;
-
 }
 

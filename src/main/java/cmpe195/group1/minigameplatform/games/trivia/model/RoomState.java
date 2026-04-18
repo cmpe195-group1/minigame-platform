@@ -53,7 +53,6 @@ public class RoomState {
         private String name;
         private int score;
         private int answered;
-
     }
 
     @Setter
@@ -65,7 +64,6 @@ public class RoomState {
         private String prompt;
         private String correctAnswer;
         private List<String> answers = new ArrayList<>();
-
     }
 
     @Setter
@@ -74,7 +72,6 @@ public class RoomState {
         private String selectedAnswer;
         private boolean correct;
         private boolean timedOut;
-
     }
 
     @Setter
@@ -89,7 +86,6 @@ public class RoomState {
         private GameSettings settings = new GameSettings();
         private String gameError = "";
         private long autoContinueRemainingMs;
-
     }
 
     @Setter
@@ -99,7 +95,6 @@ public class RoomState {
         private String playerId;
         private String answer;
         private boolean timedOut;
-
     }
 }
 

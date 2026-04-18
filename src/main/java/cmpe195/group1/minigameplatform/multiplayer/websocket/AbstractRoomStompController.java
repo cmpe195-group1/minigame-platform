@@ -1,25 +1,19 @@
 package cmpe195.group1.minigameplatform.multiplayer.websocket;
 
 import cmpe195.group1.minigameplatform.multiplayer.payload.RoomServerMessage;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+@AllArgsConstructor(access = AccessLevel.PROTECTED)
 public abstract class AbstractRoomStompController<R> {
     private final String gameKey;
 
     protected final SimpMessagingTemplate messagingTemplate;
     protected final StompSessionRegistry sessionRegistry;
 
-    protected AbstractRoomStompController(
-            String gameKey,
-            SimpMessagingTemplate messagingTemplate,
-            StompSessionRegistry sessionRegistry
-    ) {
-        this.gameKey = gameKey;
-        this.messagingTemplate = messagingTemplate;
-        this.sessionRegistry = sessionRegistry;
-    }
 
     protected void bindClientSession(String sessionId, String clientToken) {
         if (sessionId == null || clientToken == null || clientToken.isBlank()) {

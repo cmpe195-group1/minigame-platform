@@ -16,8 +16,6 @@ public class StompSessionRegistry {
     public static class SessionInfo {
         private final String clientToken;
         @Setter private volatile String roomCode;
-
-
     }
 
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();

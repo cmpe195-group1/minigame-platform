@@ -1,8 +1,7 @@
 package cmpe195.group1.minigameplatform.multiplayer.websocket;
 
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.RoomCodeRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.RoomScopedPayload;
 import cmpe195.group1.minigameplatform.multiplayer.service.RoomActionResult;
 import cmpe195.group1.minigameplatform.multiplayer.service.SnapshotRoomService;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -43,7 +42,7 @@ public abstract class AbstractSnapshotRoomStompController<R> extends AbstractRoo
         sendRoomState(clientToken, room);
     }
 
-    protected void handleJoinRoom(JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
+    protected void handleJoinRoom(RoomScopedPayload.JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
         String sessionId = getSessionId(headers);
         String clientToken = payload != null ? payload.getClientToken() : null;
         if (sessionId == null || clientToken == null || clientToken.isBlank()) {
@@ -71,7 +70,7 @@ public abstract class AbstractSnapshotRoomStompController<R> extends AbstractRoo
         broadcastRoom(roomCode, room);
     }
 
-    protected void handleLeaveRoom(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    protected void handleLeaveRoom(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         String sessionId = getSessionId(headers);
         String clientToken = getClientToken(headers);
         if (sessionId == null || clientToken == null) {

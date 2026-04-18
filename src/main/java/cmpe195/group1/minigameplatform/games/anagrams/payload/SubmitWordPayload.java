@@ -8,6 +8,5 @@ import lombok.Setter;
 @Getter
 public class SubmitWordPayload extends RoomScopedPayload {
     private String word;
-
 }
 

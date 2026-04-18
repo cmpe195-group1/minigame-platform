@@ -11,6 +11,4 @@ public class ArcheryArrowScore {
     private int round;
     private int score;
     private double dist;
-
-
 }

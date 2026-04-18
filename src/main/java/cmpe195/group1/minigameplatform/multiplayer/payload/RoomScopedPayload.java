@@ -18,5 +18,17 @@ public class RoomScopedPayload {
         }
         return null;
     }
+
+    @Getter
+    @Setter
+    public static class RoomCodeRequest extends RoomScopedPayload {
+    }
+
+    @Getter
+    @Setter
+    public static class JoinRoomRequest extends RoomScopedPayload {
+        private String clientToken;
+        private String playerName;
+    }
 }
 

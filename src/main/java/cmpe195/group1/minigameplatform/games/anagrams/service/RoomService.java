@@ -6,7 +6,7 @@ import cmpe195.group1.minigameplatform.games.anagrams.payload.PublishStatePayloa
 import cmpe195.group1.minigameplatform.games.anagrams.payload.SubmitWordPayload;
 import cmpe195.group1.minigameplatform.games.anagrams.payload.UpdateSettingsPayload;
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.RoomScopedPayload;
 import cmpe195.group1.minigameplatform.multiplayer.service.RoomActionResult;
 import cmpe195.group1.minigameplatform.multiplayer.service.SnapshotRoomService;
 import cmpe195.group1.minigameplatform.multiplayer.util.RoomCodeUtils;
@@ -70,7 +70,7 @@ public class RoomService implements SnapshotRoomService<RoomState> {
     }
 
     @Override
-    public RoomActionResult<RoomState> joinRoom(String clientId, JoinRoomRequest payload) {
+    public RoomActionResult<RoomState> joinRoom(String clientId, RoomScopedPayload.JoinRoomRequest payload) {
         String code = payload != null && payload.resolveRoomCode() != null
             ? RoomCodeUtils.normalize(payload.resolveRoomCode())
             : "";

@@ -4,8 +4,7 @@ import cmpe195.group1.minigameplatform.games.checkers.model.RoomState;
 import cmpe195.group1.minigameplatform.games.checkers.payload.MovePayload;
 import cmpe195.group1.minigameplatform.games.checkers.service.CheckersRoomService;
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.RoomCodeRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.RoomScopedPayload;
 import cmpe195.group1.minigameplatform.multiplayer.websocket.AbstractSnapshotRoomStompController;
 import cmpe195.group1.minigameplatform.multiplayer.websocket.StompSessionRegistry;
 import org.springframework.context.event.EventListener;
@@ -35,12 +34,12 @@ public class CheckersStompController extends AbstractSnapshotRoomStompController
     }
 
     @MessageMapping("/checkers/join")
-    public void joinRoom(JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
+    public void joinRoom(RoomScopedPayload.JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
         handleJoinRoom(payload, headers);
     }
 
     @MessageMapping("/checkers/start")
-    public void startGame(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void startGame(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleSnapshotAction(headers, clientToken -> roomService.startGame(
             clientToken,
             payload != null ? payload.resolveRoomCode() : null
@@ -53,7 +52,7 @@ public class CheckersStompController extends AbstractSnapshotRoomStompController
     }
 
     @MessageMapping("/checkers/reset")
-    public void reset(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void reset(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleSnapshotAction(headers, clientToken -> roomService.reset(
             clientToken,
             payload != null ? payload.resolveRoomCode() : null
@@ -61,7 +60,7 @@ public class CheckersStompController extends AbstractSnapshotRoomStompController
     }
 
     @MessageMapping("/checkers/leave")
-    public void leave(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void leave(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleLeaveRoom(payload, headers);
     }
 

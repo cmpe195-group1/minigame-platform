@@ -32,8 +32,6 @@ public class RoomState {
         private String playerId;
         private String name;
         private String clientId;
-
-
     }
 
     @Setter
@@ -41,7 +39,6 @@ public class RoomState {
     public static class GameSettings {
         private int turnSeconds = 30;
         private int startingHandSize = 7;
-
     }
 
     @Setter
@@ -51,7 +48,6 @@ public class RoomState {
         private String color;
         private String kind;
         private Integer value;
-
     }
 
     @Setter
@@ -60,7 +56,6 @@ public class RoomState {
         private String id;
         private String name;
         private List<UnoCard> hand = new ArrayList<>();
-
     }
 
     @Setter
@@ -70,7 +65,6 @@ public class RoomState {
         private int direction;
         private String activeColor;
         private String message;
-
     }
 
     @Setter
@@ -91,7 +85,6 @@ public class RoomState {
         private String turnMessage = "";
         private String winnerId;
         private GameSettings settings = new GameSettings();
-
     }
 
     @Setter
@@ -102,7 +95,6 @@ public class RoomState {
         private String kind;
         private String cardId;
         private String chosenColor;
-
     }
 }
 

@@ -9,6 +9,5 @@ import lombok.Setter;
 public class SubmitAnswerPayload extends RoomScopedPayload {
     private String answer;
     private boolean timedOut;
-
 }
 

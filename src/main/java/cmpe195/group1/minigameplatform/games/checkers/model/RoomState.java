@@ -18,5 +18,4 @@ public class RoomState {
     private CheckersGameState gameState;
     private String winner;
     private int moveCount;
-
 }

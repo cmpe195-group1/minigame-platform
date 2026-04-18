@@ -12,5 +12,4 @@ public class MovePayload {
     private CheckersPosition from;
     private CheckersPosition to;
     private CheckersGameState resultingState;
-
 }

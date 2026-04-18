@@ -31,8 +31,6 @@ public class RoomState {
         private String playerId;
         private String name;
         private String clientId;
-
-
     }
 
     @Setter
@@ -41,7 +39,6 @@ public class RoomState {
         private int letterCount = 8;
         private int minimumWordLength = 3;
         private int turnSeconds = 45;
-
     }
 
     @Setter
@@ -49,7 +46,6 @@ public class RoomState {
     public static class SubmittedWord {
         private String value;
         private int points;
-
     }
 
     @Setter
@@ -60,7 +56,6 @@ public class RoomState {
         private int score;
         private List<SubmittedWord> words = new ArrayList<>();
         private int attempts;
-
     }
 
     @Setter
@@ -74,7 +69,6 @@ public class RoomState {
         private GameSettings settings = new GameSettings();
         private String turnMessage = "";
         private String lastSubmissionStatus;
-
     }
 
     @Setter
@@ -84,7 +78,6 @@ public class RoomState {
         private String playerId;
         private String actionType;
         private String word;
-
     }
 }
 

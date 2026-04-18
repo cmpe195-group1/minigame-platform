@@ -23,5 +23,4 @@ public class RoomState {
     private PlayerScore winner;
     private Boolean lastMoveCorrect;
     private int moveCount;
-
 }

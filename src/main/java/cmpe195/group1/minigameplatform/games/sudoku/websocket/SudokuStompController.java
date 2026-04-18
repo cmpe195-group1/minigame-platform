@@ -4,8 +4,7 @@ import cmpe195.group1.minigameplatform.games.sudoku.model.RoomState;
 import cmpe195.group1.minigameplatform.games.sudoku.payload.MakeMovePayload;
 import cmpe195.group1.minigameplatform.games.sudoku.service.RoomService;
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.JoinRoomRequest;
-import cmpe195.group1.minigameplatform.multiplayer.payload.RoomCodeRequest;
+import cmpe195.group1.minigameplatform.multiplayer.payload.RoomScopedPayload;
 import cmpe195.group1.minigameplatform.multiplayer.websocket.AbstractSnapshotRoomStompController;
 import cmpe195.group1.minigameplatform.multiplayer.websocket.StompSessionRegistry;
 import org.springframework.context.event.EventListener;
@@ -35,12 +34,12 @@ public class SudokuStompController extends AbstractSnapshotRoomStompController<R
     }
 
     @MessageMapping("/sudoku/join")
-    public void joinRoom(JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
+    public void joinRoom(RoomScopedPayload.JoinRoomRequest payload, SimpMessageHeaderAccessor headers) {
         handleJoinRoom(payload, headers);
     }
 
     @MessageMapping("/sudoku/start")
-    public void startGame(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void startGame(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleSnapshotAction(headers, clientToken -> roomService.startGame(
             clientToken,
             payload != null ? payload.resolveRoomCode() : null
@@ -53,7 +52,7 @@ public class SudokuStompController extends AbstractSnapshotRoomStompController<R
     }
 
     @MessageMapping("/sudoku/newPuzzle")
-    public void newPuzzle(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void newPuzzle(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleSnapshotAction(headers, clientToken -> roomService.newPuzzle(
             clientToken,
             payload != null ? payload.resolveRoomCode() : null
@@ -61,7 +60,7 @@ public class SudokuStompController extends AbstractSnapshotRoomStompController<R
     }
 
     @MessageMapping("/sudoku/restart")
-    public void restart(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void restart(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleSnapshotAction(headers, clientToken -> roomService.restart(
             clientToken,
             payload != null ? payload.resolveRoomCode() : null
@@ -69,7 +68,7 @@ public class SudokuStompController extends AbstractSnapshotRoomStompController<R
     }
 
     @MessageMapping("/sudoku/leave")
-    public void leaveRoom(RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
+    public void leaveRoom(RoomScopedPayload.RoomCodeRequest payload, SimpMessageHeaderAccessor headers) {
         handleLeaveRoom(payload, headers);
     }
 

@@ -13,6 +13,4 @@ public class RoomParticipant {
     private String color;
     private String colorName;
     private String clientId;
-
-
 }

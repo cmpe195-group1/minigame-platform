@@ -1,9 +1,9 @@
 package cmpe195.group1.minigameplatform.multiplayer.websocket;
 
-public final class RoomTopics {
+import lombok.experimental.UtilityClass;
 
-    private RoomTopics() {
-    }
+@UtilityClass
+public final class RoomTopics {
 
     public static String clientTopic(String gameKey, String clientToken) {
         return "/topic/" + gameKey + "/client/" + clientToken;

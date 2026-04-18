@@ -18,6 +18,4 @@ public class ArcheryRoomPlayer {
     private int total;
     private boolean ready;
     private int slotIdx;
-
-
 }
