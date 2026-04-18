@@ -34,16 +34,13 @@ public class SecurityConfiguration {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://localhost:4173"
-        ));
         config.setAllowedMethods(List.of("*"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedOriginPatterns(List.of(
-        "http://localhost:*",
-        "http://127.0.0.1:*",
-        "https://multiplayer-testing-frontend-production.up.railway.app"
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "https://multiplayer-testing-frontend-production.up.railway.app",
+                "https://minigames.up.railway.app"
         ));
         config.setAllowCredentials(true); // If credentials like cookies or Authorization headers are used
 
