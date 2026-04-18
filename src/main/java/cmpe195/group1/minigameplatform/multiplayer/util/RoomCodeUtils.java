@@ -1,12 +1,12 @@
 package cmpe195.group1.minigameplatform.multiplayer.util;
 
+import lombok.experimental.UtilityClass;
+
 import java.util.Locale;
 import java.util.Random;
 
+@UtilityClass
 public final class RoomCodeUtils {
-
-    private RoomCodeUtils() {
-    }
 
     public static String normalize(String roomCode) {
         if (roomCode == null) {

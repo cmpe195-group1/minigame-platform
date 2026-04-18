@@ -1,13 +1,14 @@
 package cmpe195.group1.minigameplatform.multiplayer.service;
 
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class RoomActionResult<R> {
     private final R room;
     private final String error;
-
-    private RoomActionResult(R room, String error) {
-        this.room = room;
-        this.error = error;
-    }
 
     public static <R> RoomActionResult<R> ok(R room) {
         return new RoomActionResult<>(room, null);
@@ -19,13 +20,5 @@ public class RoomActionResult<R> {
 
     public boolean isOk() {
         return error == null;
-    }
-
-    public R getRoom() {
-        return room;
-    }
-
-    public String getError() {
-        return error;
     }
 }

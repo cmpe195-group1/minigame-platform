@@ -9,15 +9,17 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.util.function.Function;
+
 public abstract class AbstractSnapshotRoomStompController<R> extends AbstractRoomStompController<R> {
 
     private final SnapshotRoomService<R> roomService;
 
     protected AbstractSnapshotRoomStompController(
-        String gameKey,
-        SnapshotRoomService<R> roomService,
-        SimpMessagingTemplate messagingTemplate,
-        StompSessionRegistry sessionRegistry
+            String gameKey,
+            SnapshotRoomService<R> roomService,
+            SimpMessagingTemplate messagingTemplate,
+            StompSessionRegistry sessionRegistry
     ) {
         super(gameKey, messagingTemplate, sessionRegistry);
         this.roomService = roomService;
@@ -79,6 +81,42 @@ public abstract class AbstractSnapshotRoomStompController<R> extends AbstractRoo
         String roomCode = payload != null ? payload.resolveRoomCode() : null;
         R room = roomService.disconnect(clientToken, roomCode);
         clearRoomCode(sessionId);
+        if (room != null) {
+            broadcastRoom(roomService.roomCodeOf(room), room);
+        }
+    }
+
+    protected void handleSnapshotAction(SimpMessageHeaderAccessor headers, Function<String, R> action) {
+        String clientToken = getClientToken(headers);
+        if (clientToken == null) {
+            return;
+        }
+
+        R room = action.apply(clientToken);
+        if (room != null) {
+            broadcastRoom(roomService.roomCodeOf(room), room);
+        }
+    }
+
+    protected void handleRoomActionResult(SimpMessageHeaderAccessor headers, Function<String, RoomActionResult<R>> action) {
+        String clientToken = getClientToken(headers);
+        if (clientToken == null) {
+            return;
+        }
+
+        handleRoomActionResult(clientToken, action.apply(clientToken));
+    }
+
+    protected void handleRoomActionResult(String clientToken, RoomActionResult<R> result) {
+        if (clientToken == null || result == null) {
+            return;
+        }
+        if (!result.isOk()) {
+            sendError(clientToken, result.getError());
+            return;
+        }
+
+        R room = result.getRoom();
         if (room != null) {
             broadcastRoom(roomService.roomCodeOf(room), room);
         }

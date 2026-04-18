@@ -1,5 +1,8 @@
 package cmpe195.group1.minigameplatform.multiplayer.websocket;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -8,25 +11,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class StompSessionRegistry {
 
+    @Getter
+    @RequiredArgsConstructor
     public static class SessionInfo {
         private final String clientToken;
-        private volatile String roomCode;
+        @Setter private volatile String roomCode;
 
-        public SessionInfo(String clientToken) {
-            this.clientToken = clientToken;
-        }
 
-        public String getClientToken() {
-            return clientToken;
-        }
-
-        public String getRoomCode() {
-            return roomCode;
-        }
-
-        public void setRoomCode(String roomCode) {
-            this.roomCode = roomCode;
-        }
     }
 
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();

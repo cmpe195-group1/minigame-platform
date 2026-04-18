@@ -12,9 +12,9 @@ public abstract class AbstractRoomStompController<R> {
     protected final StompSessionRegistry sessionRegistry;
 
     protected AbstractRoomStompController(
-        String gameKey,
-        SimpMessagingTemplate messagingTemplate,
-        StompSessionRegistry sessionRegistry
+            String gameKey,
+            SimpMessagingTemplate messagingTemplate,
+            StompSessionRegistry sessionRegistry
     ) {
         this.gameKey = gameKey;
         this.messagingTemplate = messagingTemplate;
@@ -58,8 +58,8 @@ public abstract class AbstractRoomStompController<R> {
 
     protected void broadcastRoom(String roomCode, R room) {
         messagingTemplate.convertAndSend(
-            RoomTopics.roomTopic(gameKey, roomCode),
-            RoomServerMessage.roomState(room)
+                RoomTopics.roomTopic(gameKey, roomCode),
+                RoomServerMessage.roomState(room)
         );
     }
 
