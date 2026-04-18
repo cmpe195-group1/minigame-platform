@@ -42,7 +42,7 @@
     "globals": "^17.5.0",
     "npm-check-updates": "latest",
     "tsx": "^4.21.0",
-    "typescript": "~6.0.2",
+    "typescript": "~6.0.3",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.8"
   }
