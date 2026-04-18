@@ -10,9 +10,6 @@ import {createRoot} from "react-dom/client"
 import {BrowserRouter, Navigate, Outlet, Route, Routes} from "react-router"
 import "./globals.css"
 import Header from "@/components/PageHeader"
-import Home from "@/pages/Home"
-import Games from "@/pages/Games"
-import Search from "@/pages/Search"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
 import Trivia from "@/games/trivia/Trivia.tsx"
@@ -21,6 +18,7 @@ import Uno from "@/games/uno/Uno.tsx";
 import {type AuthSnapshot, signOutUser, startAuthListener, useAuthSnapshot} from "@/auth";
 
 import ChessPage from "./pages/ChessPage";
+import CardGrid from "@/components/CardGrid.tsx";
 
 function RequireAuth({ auth }: { auth: AuthSnapshot }) {
   if (auth.initializing) {
@@ -54,16 +52,13 @@ export function App() {
             <Route path="/login" element={<LoginPage auth={auth} />} />
             <Route path="/register" element={<RegisterPage auth={auth} />} />
             <Route element={<RequireAuth auth={auth} />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/games" element={<Games />} />
-              <Route path="/games/search" element={<Search />} />
+              <Route path="/" element={<CardGrid />} />
               <Route path="/games/sudoku" element={<SudokuPage />} />
               <Route path="/games/archery" element={<ArcheryPage />} />
               <Route path="/games/battleship" element={<BattleshipPage />} />
-              <Route path="games/chess" element={<ChessPage />} />
-              <Route path="games/knockout" element={<KnockoutGameWrapper />} />
+              <Route path="/games/chess" element={<ChessPage />} />
+              <Route path="/games/knockout" element={<KnockoutGameWrapper />} />
               <Route path="/games/checkers" element={<CheckersPage />} />
-              <Route path="/games/search" element={<Search />} />
               <Route path="/games/trivia" element={<Trivia/>} />
               <Route path="/games/anagrams" element={<Anagrams />} />
               <Route path="/games/uno" element={<Uno />} />
