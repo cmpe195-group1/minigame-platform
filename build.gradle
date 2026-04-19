@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '4.0.2'
+    id 'org.springframework.boot' version '4.0.5'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'io.freefair.lombok' version '9.2.0'
     id 'com.github.ben-manes.versions' version '0.53.0'
@@ -26,8 +26,8 @@ dependencies {
     runtimeOnly 'org.postgresql:postgresql'
 
     // OpenAPI docs
-    compileOnly 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.1'
-    developmentOnly 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.1'
+    compileOnly 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+    developmentOnly 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
     developmentOnly 'com.github.therapi:therapi-runtime-javadoc:0.15.0'
     annotationProcessor 'com.github.therapi:therapi-runtime-javadoc-scribe:0.15.0'
 
@@ -36,6 +36,7 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'com.microsoft.playwright:playwright:1.59.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -45,6 +46,24 @@ bootRun {
 
 test {
     useJUnitPlatform()
+    exclude '**/e2e/**'
+}
+
+tasks.register('testE2E', Test) {
+    description = 'Runs end-to-end tests involving UI.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    workingDir = project.rootDir
+    include '**/e2e/**'
+    useJUnitPlatform()
+
+    shouldRunAfter tasks.named('test')
+    dependsOn 'frontendBuild'
+}
+
+check {
+    dependsOn tasks.named('testE2E')
 }
 
 jacocoTestReport {
@@ -52,4 +71,25 @@ jacocoTestReport {
         xml.required = true
         html.required = true
     }
+    dependsOn test
+}
+
+tasks.register('frontendCi', Exec) {
+    inputs.file 'frontend/package-lock.json'
+    outputs.dir 'frontend/node_modules'
+
+    workingDir 'frontend'
+    commandLine 'npm', 'ci'
+}
+
+tasks.register('frontendBuild', Exec) {
+    dependsOn 'frontendCi'
+    inputs.files(fileTree('frontend') {
+        exclude 'dist/**'
+        exclude 'node_modules/**'
+    })
+    outputs.dir 'frontend/dist'
+    workingDir 'frontend'
+    commandLine 'npm', 'run', 'build'
+    environment 'VITE_BACKEND_URL', 'http://localhost:8080'
 }

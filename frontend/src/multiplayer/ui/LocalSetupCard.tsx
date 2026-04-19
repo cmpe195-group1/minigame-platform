@@ -45,6 +45,7 @@ export default function LocalSetupCard({
 
         <button
           onClick={onStart}
+          data-testid="local-setup-start"
           className="mt-6 w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400 rounded-2xl text-white text-lg font-bold shadow-xl shadow-blue-500/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
         >
           {startLabel} →

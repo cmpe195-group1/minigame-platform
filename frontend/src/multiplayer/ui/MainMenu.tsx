@@ -28,7 +28,7 @@ export default function MainMenu({ name, onSelectLocal, onSelectRoom }: Props) {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
       <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl shadow-2xl p-10 w-full max-w-md text-white text-center">
         <div className="mb-10">
-          <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow mb-2">
+          <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow mb-2" data-testid="game-main-menu-title">
             {name}
           </h1>
           <h2 className="text-xl font-semibold text-blue-300">Multiplayer</h2>
@@ -38,6 +38,7 @@ export default function MainMenu({ name, onSelectLocal, onSelectRoom }: Props) {
         <div className="flex flex-col gap-4">
           <button
             onClick={onSelectLocal}
+            data-testid="game-main-menu-local-button"
             className="w-full py-5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-2xl text-white font-bold text-lg shadow-xl shadow-blue-500/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
           >
             <div className="flex items-center justify-center gap-3">

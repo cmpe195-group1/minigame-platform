@@ -253,7 +253,7 @@ const Lobby: React.FC<LobbyProps> = ({
             <div className="absolute inset-0 bg-white/5 rounded-3xl opacity-0 hover:opacity-100 transition-opacity"></div>
             🏹
           </div>
-          <h1 className="text-6xl font-black text-white tracking-tight font-display mb-2 drop-shadow-lg">Archery</h1>
+          <h1 className="text-6xl font-black text-white tracking-tight font-display mb-2 drop-shadow-lg" data-testid="archery-lobby-title">Archery</h1>
           <p className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 tracking-wide font-display">Multiplayer</p>
           <div className="flex items-center justify-center gap-3 mt-4 text-slate-500 text-xs font-bold uppercase tracking-widest">
             <span>Real-time</span>

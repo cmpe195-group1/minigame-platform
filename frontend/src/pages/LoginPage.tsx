@@ -45,13 +45,14 @@ export default function LoginPage({ auth }: LoginPageProps) {
           Login
         </h1>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" onSubmit={handleSubmit} data-testid="login-form">
           <div>
             <label htmlFor="login-email" className="text-white block mb-1">
               Email
             </label>
             <input
               id="login-email"
+              data-testid="login-email"
               type="email"
               autoComplete="email"
               value={email}
@@ -69,6 +70,7 @@ export default function LoginPage({ auth }: LoginPageProps) {
             </label>
             <input
               id="login-password"
+              data-testid="login-password"
               type="password"
               autoComplete="current-password"
               value={password}
@@ -81,7 +83,7 @@ export default function LoginPage({ auth }: LoginPageProps) {
           </div>
 
           {error ? (
-            <p className="rounded border border-red-300/40 bg-red-500/15 px-3 py-2 text-sm text-red-100" role="alert">
+            <p className="rounded border border-red-300/40 bg-red-500/15 px-3 py-2 text-sm text-red-100" role="alert" data-testid="login-error">
               {error}
             </p>
           ) : null}
@@ -92,6 +94,7 @@ export default function LoginPage({ auth }: LoginPageProps) {
 
           <button
             type="submit"
+            data-testid="login-submit"
             disabled={isSubmitting || auth.initializing}
             className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-semibold transition disabled:cursor-not-allowed disabled:bg-blue-800"
           >

@@ -1,9 +1,11 @@
 import { Link } from "react-router"
 
 export default function GameCard({ thumbnail, title, fitWhole }: any) {
+  const slug = title ? String(title).toLowerCase() : "unknown"
+
   return (
-    <div className="bg-blue-800 rounded-xl overflow-hidden shadow-lg hover:scale-[1.02] transition-all cursor-pointer">
-      <Link to={`/games/${title}`}>
+    <div className="bg-blue-800 rounded-xl overflow-hidden shadow-lg hover:scale-[1.02] transition-all cursor-pointer" data-testid={`game-card-${slug}`}>
+      <Link to={`/games/${slug}`}>
         <img
           src={`/game-thumbnails/${thumbnail}`}
           alt={title}

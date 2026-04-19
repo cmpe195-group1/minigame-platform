@@ -1,6 +1,6 @@
 import GameCard from "@/components/GameCard"
 import { useSearchParams } from "react-router"
-import { useState, useMemo } from "react"
+import { useMemo } from "react"
 
 export default function CardGrid() {
     const [searchParams] = useSearchParams();
@@ -82,7 +82,7 @@ export default function CardGrid() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">
+      <h1 className="text-3xl font-bold mb-6" data-testid="game-library-heading">
         {searchQuery || selectedCategory
           ? `Filtered Games${searchQuery ? ` for "${searchQuery}"` : ""}${selectedCategory ? ` in ${selectedCategory}` : ""}`
           : "Game Library"}

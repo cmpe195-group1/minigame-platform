@@ -26,6 +26,7 @@ export default function KnockoutGameWrapper() {
 
   return (
     <div
+      data-testid="knockout-page"
       style={{
         marginTop: "100px",
         marginLeft: "128px",
@@ -43,7 +44,7 @@ export default function KnockoutGameWrapper() {
           brawler.
         </p>
       </div>
-      <div ref={ref} />
+      <div ref={ref} data-testid="knockout-phaser-root" />
     </div>
   );
 }

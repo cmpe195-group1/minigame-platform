@@ -31,6 +31,7 @@ export default function PlayerSetup({ onStart }: Props) {
               <button
                 key={n}
                 onClick={() => setCount(n)}
+                data-testid={`sudoku-player-count-${n}`}
                 className={`w-16 h-16 rounded-2xl text-2xl font-bold transition-all duration-200 shadow-lg
                   ${
                     count === n
@@ -70,6 +71,7 @@ export default function PlayerSetup({ onStart }: Props) {
         {/* Start button */}
         <button
           onClick={() => onStart(count)}
+          data-testid="sudoku-start-local-game"
           className="w-full py-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500
             rounded-2xl text-white text-xl font-bold shadow-xl shadow-blue-500/30
             transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
