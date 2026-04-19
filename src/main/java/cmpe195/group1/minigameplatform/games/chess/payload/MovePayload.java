@@ -2,10 +2,12 @@ package cmpe195.group1.minigameplatform.games.chess.payload;
 import cmpe195.group1.minigameplatform.games.chess.model.ChessGameState;
 import cmpe195.group1.minigameplatform.games.chess.model.ChessPosition;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Setter
 @Getter
+@NoArgsConstructor
 public class MovePayload {
     private String roomCode;
     private ChessPosition from;

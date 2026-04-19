@@ -3,6 +3,8 @@ package cmpe195.group1.minigameplatform.games.websocket;
 import cmpe195.group1.minigameplatform.games.checkers.payload.MovePayload;
 import cmpe195.group1.minigameplatform.games.checkers.service.CheckersRoomService;
 import cmpe195.group1.minigameplatform.games.checkers.websocket.CheckersStompController;
+import cmpe195.group1.minigameplatform.games.chess.service.ChessRoomService;
+import cmpe195.group1.minigameplatform.games.chess.websocket.ChessStompController;
 import cmpe195.group1.minigameplatform.games.sudoku.payload.MakeMovePayload;
 import cmpe195.group1.minigameplatform.games.sudoku.websocket.SudokuStompController;
 import cmpe195.group1.minigameplatform.multiplayer.payload.CreateRoomRequest;
@@ -98,6 +100,43 @@ class BoardGameControllersTest {
     }
 
     @Test
+    void chessController_routesMessagesThroughRoomService() {
+        ChessRoomService roomService = mock(ChessRoomService.class);
+        SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
+        StompSessionRegistry sessionRegistry = new StompSessionRegistry();
+        ChessStompController controller = new ChessStompController(roomService, messagingTemplate, sessionRegistry);
+
+        cmpe195.group1.minigameplatform.games.chess.model.RoomState room = new cmpe195.group1.minigameplatform.games.chess.model.RoomState();
+        room.setRoomCode("ROOMH");
+        when(roomService.createRoom(eq("client-h"), any(CreateRoomRequest.class))).thenReturn(room);
+        when(roomService.joinRoom(eq("client-b"), any(RoomScopedPayload.JoinRoomRequest.class))).thenReturn(RoomActionResult.ok(room));
+        when(roomService.roomCodeOf(room)).thenReturn("ROOMH");
+        when(roomService.startGame(eq("client-h"), eq("ROOMH"))).thenReturn(room);
+        when(roomService.makeMove(eq("client-h"), any(cmpe195.group1.minigameplatform.games.chess.payload.MovePayload.class))).thenReturn(room);
+        when(roomService.reset(eq("client-h"), eq("ROOMH"))).thenReturn(room);
+        when(roomService.disconnect(anyString(), eq("ROOMH"))).thenReturn(room);
+
+        controller.createRoom(createRequest("client-h"), headers("session-h"));
+        controller.joinRoom(joinRequest("client-b", "ROOMH"), headers("session-b"));
+        controller.startGame(roomPayload(new RoomScopedPayload.RoomCodeRequest(), "ROOMH"), headers("session-h"));
+        controller.move(chessMovePayload("ROOMH"), headers("session-h"));
+        controller.reset(roomPayload(new RoomScopedPayload.RoomCodeRequest(), "ROOMH"), headers("session-h"));
+        controller.leave(roomPayload(new RoomScopedPayload.RoomCodeRequest(), "ROOMH"), headers("session-h"));
+        sessionRegistry.bindClient("session-disc3", "client-disc3");
+        sessionRegistry.setRoomCode("session-disc3", "ROOMH");
+        controller.onDisconnect(disconnectEvent("session-disc3"));
+
+        verify(roomService).createRoom(eq("client-h"), any(CreateRoomRequest.class));
+        verify(roomService).joinRoom(eq("client-b"), any(RoomScopedPayload.JoinRoomRequest.class));
+        verify(roomService).startGame(eq("client-h"), eq("ROOMH"));
+        verify(roomService).makeMove(eq("client-h"), any(cmpe195.group1.minigameplatform.games.chess.payload.MovePayload.class));
+        verify(roomService).reset(eq("client-h"), eq("ROOMH"));
+        verify(roomService, times(2)).disconnect(anyString(), eq("ROOMH"));
+        verify(messagingTemplate).convertAndSend(eq("/topic/chess/client/client-h"), any(Object.class));
+        verify(messagingTemplate, atLeastOnce()).convertAndSend(eq("/topic/chess/room/ROOMH"), any(Object.class));
+    }
+
+    @Test
     void sudokuController_passesNullRoomCodeWhenActionPayloadIsMissing() {
         cmpe195.group1.minigameplatform.games.sudoku.service.RoomService roomService = mock(cmpe195.group1.minigameplatform.games.sudoku.service.RoomService.class);
         SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
@@ -138,6 +177,25 @@ class BoardGameControllersTest {
         verifyNoInteractions(messagingTemplate);
     }
 
+    @Test
+    void chessController_passesNullRoomCodeWhenActionPayloadIsMissing() {
+        ChessRoomService roomService = mock(ChessRoomService.class);
+        SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
+        StompSessionRegistry sessionRegistry = new StompSessionRegistry();
+        ChessStompController controller = new ChessStompController(roomService, messagingTemplate, sessionRegistry);
+
+        sessionRegistry.bindClient("session-h", "client-h");
+        when(roomService.startGame("client-h", null)).thenReturn(null);
+        when(roomService.reset("client-h", null)).thenReturn(null);
+
+        controller.startGame(null, headers("session-h"));
+        controller.reset(null, headers("session-h"));
+
+        verify(roomService).startGame("client-h", null);
+        verify(roomService).reset("client-h", null);
+        verifyNoInteractions(messagingTemplate);
+    }
+
     private CreateRoomRequest createRequest(String clientToken) {
         CreateRoomRequest request = new CreateRoomRequest();
         request.setClientToken(clientToken);
@@ -164,6 +222,12 @@ class BoardGameControllersTest {
 
     private MovePayload checkersMovePayload(String roomCode) {
         MovePayload payload = new MovePayload();
+        payload.setRoomCode(roomCode);
+        return payload;
+    }
+
+    private cmpe195.group1.minigameplatform.games.chess.payload.MovePayload chessMovePayload(String roomCode) {
+        cmpe195.group1.minigameplatform.games.chess.payload.MovePayload payload = new cmpe195.group1.minigameplatform.games.chess.payload.MovePayload();
         payload.setRoomCode(roomCode);
         return payload;
     }
