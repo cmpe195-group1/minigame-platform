@@ -4,7 +4,6 @@ import BaseRoomSetup from "@/multiplayer/ui/RoomSetup";
 import RoomLobby from "@/multiplayer/ui/RoomLobby";
 import ChessRoomGameView from "../games/chess/components/ChessRoomGameView";
 import { useRoomGame } from "../games/chess/room/useRoomGame";
-import type { Player } from "../games/chess/types";
 import { useMultiplayerPageFlow } from "@/multiplayer/ui/ScreenFlow";
 import LocalSetupCard from "@/multiplayer/ui/LocalSetupCard";
 import PreparingRoom from "@/multiplayer/ui/PreparingRoom";

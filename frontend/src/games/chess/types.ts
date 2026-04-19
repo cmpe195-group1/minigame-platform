@@ -11,7 +11,7 @@ export type PieceType = "pawn" | "rook" | "knight" | "bishop" | "queen" | "king"
 export interface Piece {
   type: PieceType;
   color: Color;
-  hasMoved: boolean; // For tracking moves relevant to castling and en passant
+  hasMoved: boolean;
 }
 
 export type Board = (Piece | null)[][];
@@ -19,12 +19,10 @@ export type Board = (Piece | null)[][];
 export interface ChessState {
   board: Board;
   turn: Color;
-  selectedSquare: { x: number; y: number } | null;
-  history: ChessState[];
+  selected: Position | null;
 }
 
 export type Action =
   | { type: "SELECT"; x: number; y: number }
   | { type: "MOVE"; x: number; y: number }
-  | { type: "RESET" }
-  | { type: "UNDO" };
+  | { type: "RESET" };
