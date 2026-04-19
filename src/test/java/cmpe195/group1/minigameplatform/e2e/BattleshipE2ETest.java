@@ -1,12 +1,10 @@
 package cmpe195.group1.minigameplatform.e2e;
 
 import com.microsoft.playwright.Page;
-import com.microsoft.playwright.junit.UsePlaywright;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@UsePlaywright
 class BattleshipE2ETest extends FrontendTest {
 
     @Test

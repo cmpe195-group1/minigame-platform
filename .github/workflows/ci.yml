@@ -41,6 +41,7 @@ jobs:
           name: minigame-platform.jar
           path: build/libs/minigame-platform.jar
       - name: Upload coverage or failure reports
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: reports

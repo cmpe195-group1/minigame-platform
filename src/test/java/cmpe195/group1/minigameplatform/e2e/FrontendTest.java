@@ -1,12 +1,14 @@
 package cmpe195.group1.minigameplatform.e2e;
 
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.junit.UsePlaywright;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.SimpleFileServer;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeAll;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -15,6 +17,8 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+@UsePlaywright
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 public abstract class FrontendTest {
     @AutoClose static FrontendServer frontendServer;
 
