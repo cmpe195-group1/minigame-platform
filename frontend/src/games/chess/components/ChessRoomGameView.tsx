@@ -23,6 +23,7 @@ const pieceTheme: Record<Player, { label: string; badgeClass: string }> = {
   },
 };
 
+
 function getPieceCounts(roomState: RoomState): { white: number; black: number } {
   const board = roomState.gameState?.board ?? [];
   let white = 0;
@@ -56,12 +57,14 @@ export default function ChessRoomGameView({
   const myParticipant = roomState.participants.find(
     (participant) => participant.clientId === myClientId
   );
-  const myColor = myParticipant?.pieceColor ?? "white";
+
+  const myColor = myParticipant?.pieceColor ?? null;
+
   const isMyTurn =
     roomState.status === "playing" &&
     !!gameState &&
-    !!myParticipant &&
-    gameState.turn === myParticipant.pieceColor;
+    !!myColor &&
+    gameState.turn === myColor;
 
   const winnerLabel = roomState.winner
     ? `${pieceTheme[roomState.winner].label} wins`
@@ -81,6 +84,15 @@ export default function ChessRoomGameView({
       </div>
     );
   }
+
+  console.log("[chess room]", {
+    myClientId,
+    participants: roomState.participants,
+    myParticipant,
+    myColor,
+    turn: gameState?.turn,
+    isMyTurn,
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col">
@@ -104,7 +116,13 @@ export default function ChessRoomGameView({
               isMyTurn ? "ring-4 ring-green-400/50" : ""
             }`}
           >
-            <ChessGameWrapper/>
+            <ChessGameWrapper
+              mode="multiplayer_online"
+              state={gameState}
+              playerColor={myColor ?? "white"}
+              canInteract={Boolean(isMyTurn)}
+              onPlayerMove={onSendMove}
+            />
           </div>
           <p
             className={`text-center text-sm mt-2 font-semibold xl:hidden ${
@@ -137,7 +155,7 @@ export default function ChessRoomGameView({
                 : "Opponent turn"}
             </div>
             <div className="text-xs opacity-90">
-              You are playing as {pieceTheme[myColor].label}. Room code: {roomState.roomCode}
+              You are playing as {pieceTheme[myColor ?? "white"].label}. Room code: {roomState.roomCode}
             </div>
           </div>
 

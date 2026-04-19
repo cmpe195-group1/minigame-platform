@@ -9,8 +9,7 @@ import { useMultiplayerPageFlow } from "@/multiplayer/ui/ScreenFlow";
 import LocalSetupCard from "@/multiplayer/ui/LocalSetupCard";
 import PreparingRoom from "@/multiplayer/ui/PreparingRoom";
 import PageCrashFallback from "@/multiplayer/ui/PageCrashFallback";
-import CheckersLocalGameView, { defaultLocalStatus } from "@/games/chess/components/ChessLocalView";
-import ChessLocalGameView from "@/games/chess/components/ChessLocalView";
+import ChessLocalGameView, { defaultLocalStatus } from "@/games/chess/components/ChessLocalView";
 
 export default function ChessPage() {
   const room = useRoomGame();
@@ -113,7 +112,7 @@ export default function ChessPage() {
           onLeave={handleLeaveRoom}
         />
       ) : (
-        <PreparingRoom gameTitle="Checkers" joinError={room.joinError} />
+        <PreparingRoom gameTitle="Chess" joinError={room.joinError} />
       );
 
     case "room-game":
@@ -127,7 +126,7 @@ export default function ChessPage() {
           onLeave={handleLeaveRoom}
         />
       ) : (
-        <PreparingRoom gameTitle="Checkers" joinError={room.joinError} />
+        <PreparingRoom gameTitle="Chess" joinError={room.joinError} />
       );
 
     default:

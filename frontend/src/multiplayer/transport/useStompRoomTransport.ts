@@ -70,6 +70,8 @@ export function useStompRoomTransport<TRoomState extends { roomCode: string }>(
     }
 
     const destination = `/topic/${config.gameKey}/room/${roomCode}`;
+    console.log("[transport] subscribing to room", destination);
+
     if (roomDestinationRef.current === destination) return;
 
     roomSubscriptionRef.current?.unsubscribe();
@@ -77,7 +79,9 @@ export function useStompRoomTransport<TRoomState extends { roomCode: string }>(
     latestRoomCodeRef.current = roomCode;
 
     roomSubscriptionRef.current = client.subscribe(destination, (message) => {
+      console.log("[transport] client message raw", message.body);
       const parsed = parseMessage<TRoomState>(message);
+      console.log("[transport] client message parsed", parsed);
       if (parsed?.type === "ROOM_STATE" && parsed.roomState) {
         setRoomState(parsed.roomState);
         latestRoomCodeRef.current = parsed.roomState.roomCode;
@@ -91,7 +95,7 @@ export function useStompRoomTransport<TRoomState extends { roomCode: string }>(
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
-      debug: () => {},
+      debug: (msg) => console.log("[stomp]", msg),
     });
     clientRef.current = client;
 
@@ -103,7 +107,9 @@ export function useStompRoomTransport<TRoomState extends { roomCode: string }>(
       clientSubscriptionRef.current = client.subscribe(
         `/topic/${config.gameKey}/client/${clientToken}`,
         (message) => {
+          console.log("[transport] client message raw", message.body);
           const parsed = parseMessage<TRoomState>(message);
+          console.log("[transport] client message parsed", parsed);
           if (!parsed) return;
 
           if (parsed.type === "JOIN_ERROR") {
@@ -130,6 +136,14 @@ export function useStompRoomTransport<TRoomState extends { roomCode: string }>(
       setJoinError(`Unable to connect to ${WS_URL}`);
     };
 
+    client.onStompError = (frame) => {
+      console.error("[transport] STOMP error", frame.headers, frame.body);
+    };
+
+    client.onWebSocketClose = (event) => {
+      console.warn("[transport] socket closed", event);
+    };
+
     client.activate();
     return () => {
       clientSubscriptionRef.current?.unsubscribe();
@@ -143,9 +157,12 @@ export function useStompRoomTransport<TRoomState extends { roomCode: string }>(
   const publishJson = useCallback((destination: string, body: unknown) => {
     const client = clientRef.current;
     if (!client?.connected) {
+      console.error("[transport] not connected", { destination, body });
       setJoinError("Still connecting to the server.");
       return;
     }
+
+    console.log("[transport] publish", destination, body);
     client.publish({ destination, body: JSON.stringify(body) });
   }, []);
 
