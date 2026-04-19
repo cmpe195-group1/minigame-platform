@@ -26,6 +26,7 @@ export default function CheckersMainMenu({ onSelectLocal, onSelectRoom }: Props)
         <div className="flex flex-col gap-4">
           <button
             onClick={onSelectLocal}
+            data-testid="checkers-local-mode-button"
             className="w-full py-5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-2xl text-white font-bold text-lg shadow-xl shadow-blue-500/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
           >
             <div className="flex items-center justify-center gap-3">

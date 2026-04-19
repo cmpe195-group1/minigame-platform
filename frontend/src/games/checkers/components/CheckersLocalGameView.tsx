@@ -53,6 +53,7 @@ export default function CheckersLocalGameView({
 
         <div className="w-full max-w-xs xl:max-w-sm flex flex-col gap-4">
           <div
+            data-testid="checkers-local-status"
             className={`rounded-2xl p-4 border text-sm ${
               localStatus.winner
                 ? "bg-amber-500/20 border-amber-400/40 text-amber-200"

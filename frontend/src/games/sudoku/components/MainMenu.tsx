@@ -30,6 +30,7 @@ export default function MainMenu({ onSelectLocal, onSelectRoom }: Props) {
         <div className="flex flex-col gap-4">
           <button
             onClick={onSelectLocal}
+            data-testid="sudoku-local-mode-button"
             className="group relative w-full py-5 bg-gradient-to-r from-blue-600 to-blue-500
               hover:from-blue-500 hover:to-blue-400 rounded-2xl text-white font-bold text-lg
               shadow-xl shadow-blue-500/30 transition-all duration-200 hover:scale-[1.02]

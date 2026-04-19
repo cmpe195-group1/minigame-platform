@@ -149,6 +149,7 @@ export default function Header({ auth, onLogout }: HeaderProps) {
           {/* Middle Section: Search */}
           <div className="hidden md:flex flex-1 mx-6">
             <input
+              data-testid="header-search"
               placeholder="Search games..."
               value={searchInput}
               onChange={handleSearchChange}
@@ -168,10 +169,10 @@ export default function Header({ auth, onLogout }: HeaderProps) {
           <div className="flex items-center gap-3">
             {auth.user ? (
               <>
-                <span className="hidden text-sm text-blue-100 md:block">
+                <span className="hidden text-sm text-blue-100 md:block" data-testid="header-user-label">
                   {userLabel}
                 </span>
-                <LogoutButton onClick={handleLogout} disabled={isLoggingOut} type="button">
+                <LogoutButton onClick={handleLogout} disabled={isLoggingOut} type="button" data-testid="logout-button">
                   {isLoggingOut ? 'Logging Out...' : 'Logout'}
                 </LogoutButton>
               </>

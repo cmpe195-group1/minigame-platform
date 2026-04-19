@@ -950,6 +950,7 @@ export default function Anagrams() {
                 key={mode.id}
                 type="button"
                 onClick={() => handleSetupModeChange(mode.id)}
+                data-testid={`anagrams-mode-${mode.id}`}
                 className={`rounded-[1.5rem] border p-5 text-left transition ${
                   setupMode === mode.id
                     ? "border-cyan-300 bg-cyan-400/10 shadow-lg shadow-cyan-500/10"
@@ -1073,6 +1074,7 @@ export default function Anagrams() {
                   <input
                     value={name}
                     onChange={(event) => handleNameChange(index, event)}
+                     data-testid={`anagrams-player-name-${index + 1}`}
                     placeholder={`Enter player ${index + 1} name`}
                     className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
                   />
@@ -1171,7 +1173,7 @@ export default function Anagrams() {
             </div>
 
             {setupError && (
-              <div className="mt-6 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              <div className="mt-6 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100" data-testid="anagrams-setup-error">
                 {setupError}
               </div>
             )}
@@ -1179,6 +1181,7 @@ export default function Anagrams() {
             <button
               type="button"
               onClick={startLocalMatch}
+              data-testid="anagrams-start-local-game"
               className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-cyan-400 via-sky-400 to-yellow-300 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-blue-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/30"
             >
               Start word race
@@ -1479,7 +1482,7 @@ export default function Anagrams() {
       )}
 
       {phase === "playing" && activePlayer && (
-        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]" data-testid="anagrams-active-turn">
           <div className="rounded-[2rem] border border-blue-300/20 bg-blue-950/75 p-6 shadow-xl shadow-black/25 backdrop-blur-sm md:p-8">
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div>

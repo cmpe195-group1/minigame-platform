@@ -88,6 +88,7 @@ function ModeSelect({ onSelect, initialRoomId }: {
 
         <button
           onClick={() => onSelect("multiplayer_local")}
+          data-testid="battleship-local-2p-button"
           className="group relative px-10 py-6 rounded-xl bg-gradient-to-br from-emerald-900/80 to-emerald-950/80 border border-emerald-700/40 hover:border-emerald-500/60 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-emerald-900/30"
         >
           <div className="text-3xl mb-2">👥</div>
@@ -1149,7 +1150,7 @@ function BattleshipPage() {
           <span className="text-blue-400">⚓</span> BATTLESHIP{" "}
           <span className="text-red-400">⚓</span>
         </h1>
-        <p className="text-gray-600 text-xs tracking-widest uppercase mt-1">
+        <p className="text-gray-600 text-xs tracking-widest uppercase mt-1" data-testid="battleship-mode-label">
           {modeLabel}
         </p>
       </div>

@@ -1407,6 +1407,7 @@ export default function Uno() {
                 key={mode.id}
                 type="button"
                 onClick={() => handleSetupModeChange(mode.id)}
+                data-testid={`uno-mode-${mode.id}`}
                 className={`rounded-[1.5rem] border p-5 text-left transition ${
                   setupMode === mode.id
                     ? "border-cyan-300 bg-cyan-400/10 shadow-lg shadow-cyan-500/10"
@@ -1461,6 +1462,7 @@ export default function Uno() {
                   <input
                     value={name}
                     onChange={(event) => handleNameChange(index, event)}
+                    data-testid={`uno-player-name-${index + 1}`}
                     placeholder={`Enter player ${index + 1} name`}
                     className="mt-3 w-full rounded-2xl border border-white/10 bg-blue-900/80 px-4 py-3 text-white outline-none transition placeholder:text-blue-200/45 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/30"
                   />
@@ -1510,6 +1512,7 @@ export default function Uno() {
             <button
               type="button"
               onClick={startLocalMatch}
+              data-testid="uno-start-local-game"
               className="mt-6 w-full rounded-[1.25rem] bg-gradient-to-r from-red-500 via-yellow-300 to-blue-500 px-5 py-4 text-lg font-black uppercase tracking-[0.2em] text-slate-950 shadow-lg shadow-red-500/20 transition hover:-translate-y-0.5 hover:shadow-yellow-300/30"
             >
               Start UNO match
@@ -1969,6 +1972,7 @@ export default function Uno() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            data-testid="uno-local-handoff"
             className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/90 px-6 py-10 backdrop-blur-md"
           >
             <motion.div
@@ -2014,6 +2018,7 @@ export default function Uno() {
                   <button
                     type="button"
                     onClick={() => setHandoffStage("reveal")}
+                    data-testid="uno-ready-for-reveal"
                     className="mt-8 rounded-full bg-yellow-300 px-8 py-4 text-lg font-black uppercase tracking-[0.2em] text-slate-900 transition hover:scale-[1.02] hover:bg-yellow-200"
                   >
                     Ready for reveal

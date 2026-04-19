@@ -67,7 +67,7 @@ export default function ScoreBoard({
       )}
 
       {/* Scoreboard */}
-      <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden" data-testid="sudoku-scoreboard">
         <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">
             Scoreboard

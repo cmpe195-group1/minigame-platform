@@ -1,5 +1,6 @@
 package cmpe195.group1.minigameplatform.e2e;
 
+import com.microsoft.playwright.Page;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -17,10 +18,64 @@ import java.nio.file.Path;
 public abstract class FrontendTest {
     @AutoClose static FrontendServer frontendServer;
 
+    private static final String DEFAULT_LOGIN_EMAIL = "test@example.com";
+    private static final String DEFAULT_LOGIN_PASSWORD = "password";
+
     @BeforeAll
     static void setup() throws IOException {
         frontendServer = new FrontendServer(Path.of("frontend/dist").toRealPath(), 8001);
         frontendServer.start();
+    }
+
+    protected String baseUrl() {
+        return frontendServer.baseUrl();
+    }
+
+    protected void navigateTo(Page page, String path) {
+        String normalizedPath = path.startsWith("/") ? path : "/" + path;
+        page.navigate(baseUrl() + normalizedPath);
+    }
+
+    protected void useDesktopViewport(Page page) {
+        page.setViewportSize(1440, 1200);
+    }
+
+    protected void ensureLoggedInIfNeeded(Page page) {
+        navigateTo(page, "/");
+        page.waitForFunction("""
+                () => window.location.pathname === '/login'
+                    || !!document.querySelector('#login-email')
+                    || !!document.querySelector('[data-testid="logout-button"]')
+                    || !!document.querySelector('[data-testid="game-library-heading"]')
+                """);
+
+        if (!page.url().endsWith("/login")) {
+            return;
+        }
+
+        page.locator("#login-email").fill(System.getenv().getOrDefault("E2E_EMAIL", DEFAULT_LOGIN_EMAIL));
+        page.locator("#login-password").fill(System.getenv().getOrDefault("E2E_PASSWORD", DEFAULT_LOGIN_PASSWORD));
+        page.locator("[data-testid='login-submit']").click();
+
+        page.waitForFunction("""
+                () => !!document.querySelector('[data-testid="login-error"]')
+                    || !!document.querySelector('[data-testid="logout-button"]')
+                    || !!document.querySelector('[data-testid="game-library-heading"]')
+                    || window.location.pathname !== '/login'
+                """);
+
+        if (page.locator("[data-testid='login-error']").isVisible()) {
+            throw new IllegalStateException("E2E login failed: " + page.locator("[data-testid='login-error']").innerText());
+        }
+    }
+
+    protected void openGameFromHome(Page page, String gameSlug) {
+        ensureLoggedInIfNeeded(page);
+        page.locator("[data-testid='logout-button']").waitFor();
+        page.locator("[data-testid='game-library-heading']").waitFor();
+        page.locator("[data-testid='game-card-" + gameSlug + "']").scrollIntoViewIfNeeded();
+        page.locator("[data-testid='game-card-" + gameSlug + "'] a").click();
+        page.waitForFunction("slug => window.location.pathname.toLowerCase() === '/games/' + slug", gameSlug);
     }
 
     private static final class FrontendServer implements Closeable {
