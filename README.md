@@ -48,7 +48,7 @@ Included games:
 
 **Live Demo:** https://minigames.up.railway.app
 
-**Trivia Game walkthrough video:** [`docs/screenshots/trivia-hosted-game.webm`](docs/screenshots/trivia-hosted-game.webm)
+**Trivia Game walkthrough video:** [`docs/screenshots/trivia-hosted-game.mp4`](docs/screenshots/trivia-hosted-game.mp4)
 
 ---
 
