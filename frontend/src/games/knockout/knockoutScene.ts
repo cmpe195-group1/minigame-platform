@@ -10,15 +10,25 @@ import {
 
 type Player = "A" | "B";
 
+export interface KnockoutStatus {
+  currentPlayer: Player;
+  phase: "aiming" | "waiting" | "finished";
+  aRemaining: number;
+  bRemaining: number;
+  winner: Player | null;
+}
+
+export interface KnockoutSceneConfig {
+  onStatusChange?: (status: KnockoutStatus) => void;
+}
+
 export class KnockoutScene extends Phaser.Scene {
   private static readonly BOARD = new Phaser.Geom.Rectangle(70, 90, 660, 420);
-  private static readonly ELIMINATION_MARGIN = 34;
-  private static readonly EDGE_SLOW_ZONE = 58;
+  private static readonly ELIMINATION_MARGIN = PUCK_RADIUS;
+  private static readonly EDGE_SLOW_ZONE = 24;
   private static readonly MAX_PUCK_SPEED = MAX_POWER * 1.2;
-  private static readonly BASE_FRICTION = Math.max(FRICTION, 0.992);
-  private static readonly COLLISION_SEPARATION_BIAS = 0.75;
-  private static readonly MIN_COLLISION_EXIT_SPEED = 26;
-  private static readonly COLLISION_REPULSION = 18;
+  private static readonly BASE_FRICTION = Phaser.Math.Clamp(FRICTION, 0.985, 0.997);
+  private static readonly MIN_POST_COLLISION_SPEED = 36;
 
   private currentPlayer: Player = "A";
   private phase: "aiming" | "waiting" | "finished" = "aiming";
@@ -29,13 +39,16 @@ export class KnockoutScene extends Phaser.Scene {
   private aimingLine!: Phaser.GameObjects.Graphics;
   private turnBadge!: Phaser.GameObjects.Container;
   private infoText!: Phaser.GameObjects.Text;
+  private scoreText!: Phaser.GameObjects.Text;
   private handoffOverlay!: Phaser.GameObjects.Container;
   private winnerOverlay!: Phaser.GameObjects.Container;
   private handoffText!: Phaser.GameObjects.Text;
   private winnerText!: Phaser.GameObjects.Text;
+  private onStatusChange: ((status: KnockoutStatus) => void) | null;
 
-  constructor() {
+  constructor(config?: KnockoutSceneConfig) {
     super("KnockoutScene");
+    this.onStatusChange = config?.onStatusChange ?? null;
   }
 
   create() {
@@ -44,12 +57,19 @@ export class KnockoutScene extends Phaser.Scene {
     this.createPuckTextures();
     this.physics.world.OVERLAP_BIAS = Math.max(this.physics.world.OVERLAP_BIAS, PUCK_RADIUS);
 
-    this.pucks = this.physics.add.group();
+    this.pucks = this.physics.add.group({
+      collideWorldBounds: false,
+      bounceX: 1,
+      bounceY: 1,
+      maxVelocityX: KnockoutScene.MAX_PUCK_SPEED,
+      maxVelocityY: KnockoutScene.MAX_PUCK_SPEED,
+    });
+
     this.physics.add.collider(
       this.pucks,
       this.pucks,
       this.handlePuckCollision,
-      this.shouldProcessPuckCollision,
+      undefined,
       this
     );
 
@@ -58,10 +78,39 @@ export class KnockoutScene extends Phaser.Scene {
 
     this.spawnPucks();
     this.showHandoffPopup("Player A", "Take your shot");
+    this.emitStatus();
 
     this.input.on("pointerdown", this.onDown, this);
     this.input.on("pointermove", this.onMove, this);
     this.input.on("pointerup", this.onUp, this);
+  }
+
+  private emitStatus() {
+    if (!this.onStatusChange) return;
+    this.onStatusChange({
+      currentPlayer: this.currentPlayer,
+      phase: this.phase,
+      aRemaining: this.countRemaining("A"),
+      bRemaining: this.countRemaining("B"),
+      winner: this.getWinner(),
+    });
+  }
+
+  private countRemaining(player: Player) {
+    let total = 0;
+    this.pucks?.getChildren().forEach((obj) => {
+      const puck = obj as Phaser.Physics.Arcade.Image;
+      if (puck.active && puck.getData("player") === player) {
+        total += 1;
+      }
+    });
+    return total;
+  }
+
+  private refreshScoreUi() {
+    if (!this.scoreText) return;
+    this.scoreText.setText(`A: ${this.countRemaining("A")}   B: ${this.countRemaining("B")}`);
+    this.emitStatus();
   }
 
   spawnPucks() {
@@ -71,19 +120,21 @@ export class KnockoutScene extends Phaser.Scene {
       const textureKey = player === "A" ? "knockout-puck-a" : "knockout-puck-b";
       const puck = this.physics.add.image(x, y, textureKey);
       const body = puck.body as Phaser.Physics.Arcade.Body;
+      const textureSize = PUCK_RADIUS * 2 + 8;
+      const offset = (textureSize - PUCK_RADIUS * 2) / 2;
 
-      puck.setCircle(PUCK_RADIUS);
-      puck.setBounce(1.02);
-      puck.setDrag(1.2, 1.2);
-      puck.setCollideWorldBounds(false);
-      puck.setMaxVelocity(KnockoutScene.MAX_PUCK_SPEED, KnockoutScene.MAX_PUCK_SPEED);
-      puck.setDepth(5);
+      body.setCircle(PUCK_RADIUS, offset, offset);
       body.setAllowGravity(false);
+      body.setBounce(1, 1);
       body.setMass(1);
+      body.setMaxVelocity(KnockoutScene.MAX_PUCK_SPEED, KnockoutScene.MAX_PUCK_SPEED);
+      body.setDrag(0, 0);
       body.pushable = true;
+      body.immovable = false;
 
+      puck.setDepth(5);
+      puck.setCollideWorldBounds(false);
       puck.setTexture(textureKey);
-
       puck.setData("player", player);
       puck.setData("baseColor", color);
 
@@ -98,28 +149,34 @@ export class KnockoutScene extends Phaser.Scene {
     for (let i = 0; i < 6; i++) {
       createPuck(630, 140 + i * 58, 0xff6b57, "B");
     }
+
+    this.refreshScoreUi();
   }
 
   onDown(pointer: Phaser.Input.Pointer) {
     if (this.phase !== "aiming" || this.handoffOverlay.visible || this.winnerOverlay.visible) return;
 
-    const bodies = this.physics.overlapRect(pointer.x, pointer.y, 1, 1);
+    let selected: Phaser.Physics.Arcade.Image | null = null;
+    this.pucks.getChildren().forEach((obj) => {
+      if (selected) return;
+      const puck = obj as Phaser.Physics.Arcade.Image;
+      if (!puck.active) return;
+      if (puck.getData("player") !== this.currentPlayer) return;
+      if (this.isPuckMoving(puck)) return;
+      if (Phaser.Math.Distance.Between(pointer.x, pointer.y, puck.x, puck.y) <= PUCK_RADIUS + 4) {
+        selected = puck;
+      }
+    });
 
-    if (!bodies.length) return;
+    if (!selected) return;
 
-    const puck = bodies[0].gameObject as Phaser.Physics.Arcade.Image;
-
-    if (puck.getData("player") !== this.currentPlayer) return;
-    if (this.isPuckMoving(puck)) return;
-
-    this.selectedPuck = puck;
+    this.selectedPuck = selected;
     this.aimingLine.setVisible(true);
     this.drawAimGuide(pointer);
   }
 
   onMove(pointer: Phaser.Input.Pointer) {
     if (!this.selectedPuck) return;
-
     this.drawAimGuide(pointer);
   }
 
@@ -128,15 +185,16 @@ export class KnockoutScene extends Phaser.Scene {
 
     const dx = this.selectedPuck.x - pointer.x;
     const dy = this.selectedPuck.y - pointer.y;
-    const power = Math.min(Math.sqrt(dx * dx + dy * dy) * 2.2, MAX_POWER);
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const power = Math.min(distance * 2.2, MAX_POWER);
 
     if (power > 10) {
-      this.selectedPuck.setVelocity(
-        (dx / Math.max(1, Math.sqrt(dx * dx + dy * dy))) * power,
-        (dy / Math.max(1, Math.sqrt(dx * dx + dy * dy))) * power
-      );
+      const nx = dx / Math.max(1, distance);
+      const ny = dy / Math.max(1, distance);
+      this.selectedPuck.setVelocity(nx * power, ny * power);
       this.phase = "waiting";
       this.setTurnUi(`${this.playerName(this.currentPlayer)} shooting...`);
+      this.emitStatus();
     }
 
     this.selectedPuck = null;
@@ -148,12 +206,13 @@ export class KnockoutScene extends Phaser.Scene {
 
     this.pucks.getChildren().forEach((obj) => {
       const puck = obj as Phaser.Physics.Arcade.Image;
-
-      if (!puck.body) return;
+      if (!puck.body || !puck.active) return;
 
       this.applyBoardForces(puck);
-      const eliminated = this.checkElimination(puck);
-      if (eliminated) return;
+      if (this.checkElimination(puck)) {
+        return;
+      }
+
 
       if (puck.body.velocity.length() > STOP_THRESHOLD) {
         moving = true;
@@ -178,6 +237,7 @@ export class KnockoutScene extends Phaser.Scene {
     this.currentPlayer = this.currentPlayer === "A" ? "B" : "A";
     this.setTurnUi(`${this.playerName(this.currentPlayer)}: drag to shoot`);
     this.showHandoffPopup(this.playerName(this.currentPlayer), "Hand over device");
+    this.emitStatus();
   }
 
   private createPuckTextures() {
@@ -247,6 +307,12 @@ export class KnockoutScene extends Phaser.Scene {
       fontStyle: "bold",
     });
     this.turnBadge = this.add.container(0, 0, [badgeBg, badgeDot, this.infoText]).setDepth(15);
+
+    this.scoreText = this.add.text(WIDTH - 170, 44, "A: 6   B: 6", {
+      color: "#17324d",
+      fontSize: "24px",
+      fontStyle: "bold",
+    }).setDepth(15);
 
     const overlayBg = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x0f1723, 0.5);
     const overlayCard = this.add.rectangle(WIDTH / 2, HEIGHT / 2, 320, 170, 0xfff6e5, 1);
@@ -339,100 +405,78 @@ export class KnockoutScene extends Phaser.Scene {
     firstObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject,
     secondObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject
   ) {
-    const first = (firstObj as any).gameObject as Phaser.Physics.Arcade.Image;
-    const second = (secondObj as any).gameObject as Phaser.Physics.Arcade.Image;
+    const first = firstObj as Phaser.Physics.Arcade.Image;
+    const second = secondObj as Phaser.Physics.Arcade.Image;
 
-    if (!first || !first.body || !second || !second.body) return false;
-    return first.active && second.active;
+    return Boolean(
+      first &&
+      second &&
+      first.active &&
+      second.active &&
+      first.body &&
+      second.body
+    );
   }
 
   private handlePuckCollision(
     firstObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject,
     secondObj: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile | Phaser.GameObjects.GameObject
   ) {
-    const first = (firstObj as Phaser.Physics.Arcade.Body).gameObject as Phaser.Physics.Arcade.Image;
-    const second = (secondObj as Phaser.Physics.Arcade.Body).gameObject as Phaser.Physics.Arcade.Image;
+    const first = firstObj as Phaser.Physics.Arcade.Image;
+    const second = secondObj as Phaser.Physics.Arcade.Image;
     const firstBody = first.body as Phaser.Physics.Arcade.Body | undefined;
     const secondBody = second.body as Phaser.Physics.Arcade.Body | undefined;
+
     if (!firstBody || !secondBody) return;
 
     const dx = second.x - first.x;
     const dy = second.y - first.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const distance = Math.sqrt(dx * dx + dy * dy) || 0.0001;
     const minDistance = PUCK_RADIUS * 2;
-    const nx = distance > 0.0001 ? dx / distance : 1;
-    const ny = distance > 0.0001 ? dy / distance : 0;
+
+    const nx = dx / distance;
+    const ny = dy / distance;
 
     if (distance < minDistance) {
-      const separation = ((minDistance - distance) * 0.5) + KnockoutScene.COLLISION_SEPARATION_BIAS;
-      first.x -= nx * separation;
-      first.y -= ny * separation;
-      second.x += nx * separation;
-      second.y += ny * separation;
-      firstBody.position.x -= nx * separation;
-      firstBody.position.y -= ny * separation;
-      secondBody.position.x += nx * separation;
-      secondBody.position.y += ny * separation;
+      const overlap = (minDistance - distance) / 2 + 0.5;
+
+      first.x -= nx * overlap;
+      first.y -= ny * overlap;
+      second.x += nx * overlap;
+      second.y += ny * overlap;
+
+      firstBody.reset(first.x, first.y);
+      secondBody.reset(second.x, second.y);
     }
 
-    const relativeVelocityX = secondBody.velocity.x - firstBody.velocity.x;
-    const relativeVelocityY = secondBody.velocity.y - firstBody.velocity.y;
-    const relativeNormalSpeed = relativeVelocityX * nx + relativeVelocityY * ny;
-    const repulsionBoost = Math.max(
-      KnockoutScene.MIN_COLLISION_EXIT_SPEED - relativeNormalSpeed,
-      0
-    ) + KnockoutScene.COLLISION_REPULSION;
+    const rvx = secondBody.velocity.x - firstBody.velocity.x;
+    const rvy = secondBody.velocity.y - firstBody.velocity.y;
+    const velAlongNormal = rvx * nx + rvy * ny;
 
-    if (repulsionBoost > 0) {
-      const impulse = repulsionBoost * 0.5;
-      firstBody.velocity.x -= nx * impulse;
-      firstBody.velocity.y -= ny * impulse;
-      secondBody.velocity.x += nx * impulse;
-      secondBody.velocity.y += ny * impulse;
-    }
+    if (velAlongNormal > 0) return;
 
-    firstBody.velocity.setLength(
-      Math.min(firstBody.velocity.length(), KnockoutScene.MAX_PUCK_SPEED)
-    );
-    secondBody.velocity.setLength(
-      Math.min(secondBody.velocity.length(), KnockoutScene.MAX_PUCK_SPEED)
-    );
+    const restitution = 1;
+    const impulse = -(1 + restitution) * velAlongNormal / 2;
 
-    const impactSpeed = Phaser.Math.Clamp(
-      firstBody.velocity.clone().subtract(secondBody.velocity).length(),
-      0,
-      KnockoutScene.MAX_PUCK_SPEED
-    );
+    const impulseX = impulse * nx;
+    const impulseY = impulse * ny;
 
-    if (impactSpeed > STOP_THRESHOLD * 3) {
-      const hitX = (first.x + second.x) / 2;
-      const hitY = (first.y + second.y) / 2;
-      this.emitCollisionParticles(hitX, hitY, impactSpeed);
-      this.playImpactSound(impactSpeed);
-    }
+    firstBody.velocity.x -= impulseX;
+    firstBody.velocity.y -= impulseY;
+    secondBody.velocity.x += impulseX;
+    secondBody.velocity.y += impulseY;
+
+    firstBody.velocity.limit(KnockoutScene.MAX_PUCK_SPEED);
+    secondBody.velocity.limit(KnockoutScene.MAX_PUCK_SPEED);
   }
 
   private applyBoardForces(puck: Phaser.Physics.Arcade.Image) {
     if (!puck.body) return;
 
     const body = puck.body as Phaser.Physics.Arcade.Body;
-    const bounds = KnockoutScene.BOARD;
-    const edgeZone = KnockoutScene.EDGE_SLOW_ZONE;
 
     let vx = body.velocity.x * KnockoutScene.BASE_FRICTION;
     let vy = body.velocity.y * KnockoutScene.BASE_FRICTION;
-
-    const leftDist = puck.x - bounds.left;
-    const rightDist = bounds.right - puck.x;
-    const topDist = puck.y - bounds.top;
-    const bottomDist = bounds.bottom - puck.y;
-    const edgeDistance = Math.min(leftDist, rightDist, topDist, bottomDist);
-
-    if (edgeDistance < edgeZone) {
-      const edgeFactor = Phaser.Math.Clamp(edgeDistance / edgeZone, 0.7, 1);
-      vx *= edgeFactor;
-      vy *= edgeFactor;
-    }
 
     const speed = Math.sqrt(vx * vx + vy * vy);
     if (speed > KnockoutScene.MAX_PUCK_SPEED) {
@@ -441,22 +485,23 @@ export class KnockoutScene extends Phaser.Scene {
       vy *= cap;
     }
 
-    puck.setVelocity(vx, vy);
+    body.setVelocity(vx, vy);
   }
 
   private checkElimination(puck: Phaser.Physics.Arcade.Image) {
     const bounds = KnockoutScene.BOARD;
     const margin = KnockoutScene.ELIMINATION_MARGIN;
-    const inside =
-      puck.x >= bounds.left - margin &&
-      puck.x <= bounds.right + margin &&
-      puck.y >= bounds.top - margin &&
-      puck.y <= bounds.bottom + margin;
+    const outside =
+      puck.x < bounds.left - margin ||
+      puck.x > bounds.right + margin ||
+      puck.y < bounds.top - margin ||
+      puck.y > bounds.bottom + margin;
 
-    if (!inside) {
+    if (outside) {
       this.emitEliminationParticles(puck.x, puck.y, puck.getData("baseColor") as number);
       this.playEliminationSound();
       puck.destroy();
+      this.refreshScoreUi();
       return true;
     }
 
@@ -464,18 +509,8 @@ export class KnockoutScene extends Phaser.Scene {
   }
 
   private getWinner(): Player | null {
-    let aCount = 0;
-    let bCount = 0;
-
-    this.pucks.getChildren().forEach((obj) => {
-      const puck = obj as Phaser.Physics.Arcade.Image;
-      if (!puck.active) return;
-      if (puck.getData("player") === "A") {
-        aCount += 1;
-      } else {
-        bCount += 1;
-      }
-    });
+    const aCount = this.countRemaining("A");
+    const bCount = this.countRemaining("B");
 
     if (aCount === 0) return "B";
     if (bCount === 0) return "A";
@@ -492,6 +527,7 @@ export class KnockoutScene extends Phaser.Scene {
     this.winnerText.setText(`${this.playerName(winner)} wins!`);
     this.setTurnUi(`${this.playerName(winner)} wins`);
     this.winnerOverlay.setVisible(true);
+    this.emitStatus();
   }
 
   private emitCollisionParticles(x: number, y: number, impactSpeed: number) {
