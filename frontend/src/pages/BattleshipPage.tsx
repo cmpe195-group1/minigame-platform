@@ -37,6 +37,8 @@ function ModeSelect({ onSelect, initialRoomId }: {
 }) {
   const [showJoin, setShowJoin] = useState(false);
   const [joinCode, setJoinCode] = useState(initialRoomId?.roomId || "");
+  const normalizedJoinCode = joinCode.trim().toUpperCase();
+  const canJoinByCode = normalizedJoinCode.length >= 4;
 
   // Auto-join if URL has room ID
   useEffect(() => {
@@ -137,7 +139,8 @@ function ModeSelect({ onSelect, initialRoomId }: {
             Have a room code? Join here
           </button>
         ) : (
-          <div className="flex gap-2 items-center">
+          // <div className="flex gap-2 items-center">
+          <div className="flex flex-col items-center gap-3">
             <input
               type="text"
               value={joinCode}
@@ -147,11 +150,18 @@ function ModeSelect({ onSelect, initialRoomId }: {
               className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white text-center tracking-widest font-mono text-lg w-48 focus:outline-none focus:border-purple-500"
             />
             <button
-              onClick={() => joinCode.length >= 4 && onSelect("multiplayer_online", joinCode)}
-              disabled={joinCode.length < 4}
+              onClick={() => canJoinByCode && onSelect("multiplayer_online", normalizedJoinCode)}
+              disabled={!canJoinByCode}
               className="px-6 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold cursor-pointer transition-colors"
             >
-              JOIN
+              JOIN 2P
+            </button>
+            <button
+              onClick={() => canJoinByCode && onSelect("multiplayer_online_4p", normalizedJoinCode)}
+              disabled={!canJoinByCode}
+              className="px-6 py-2 rounded-lg bg-pink-600 hover:bg-pink-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold cursor-pointer transition-colors"
+            >
+              JOIN 4P
             </button>
             <button
               onClick={() => setShowJoin(false)}
@@ -160,6 +170,11 @@ function ModeSelect({ onSelect, initialRoomId }: {
               ✕
             </button>
           </div>
+        )}
+        {showJoin && (
+          <p className="text-xs text-gray-500 text-center">
+            Match the host room type: use `JOIN 2P` for `#room/...` invites and `JOIN 4P` for `#room4/...` invites.
+          </p>
         )}
       </div>
 
@@ -496,15 +511,27 @@ function BattleshipPage() {
 
           if (msg.type === "game_start_4p" && "yourIndex" in msg) {
             // Game starting!
+            const myIdx = msg.yourIndex;
+            const boardDataList = msg.allBoards;
+            const boards = [0, 1, 2, 3].map((idx) => {
+              if (idx === myIdx) return myBoard;
+              const boardData = boardDataList[idx];
+              return boardData ? Board.fromData(boardData) : new Board();
+            });
+
             const logic = new GameLogic("multiplayer_online_4p");
-            logic.board1 = myBoard;
+            // logic.board1 = myBoard;
             // Set boards from server data (we only fully know our own)
             // Other boards are hidden (empty) - attacks are validated server-side
-            logic.board2 = new Board();
-            logic.board3 = new Board();
-            logic.board4 = new Board();
+            // logic.board2 = new Board();
+            // logic.board3 = new Board();
+            // logic.board4 = new Board();
+            logic.board1 = boards[0];
+            logic.board2 = boards[1];
+            logic.board3 = boards[2];
+            logic.board4 = boards[3];
 
-            const myIdx = msg.yourIndex;
+            // const myIdx = msg.yourIndex;
             setMyPlayerIndex(myIdx);
             mgr.playerIndex = myIdx;
 
@@ -796,12 +823,16 @@ function BattleshipPage() {
 
         // If the target is our board, process the attack
         if (targetIdx === myIdx) {
-          const result = logic.board1.receiveAttack(msg.col, msg.row);
+          // const result = logic.board1.receiveAttack(msg.col, msg.row);
+          const myBoard = logic.getBoardByIndex(myIdx);
+          const result = myBoard.receiveAttack(msg.col, msg.row);
           if (result === "invalid") return;
 
           let sunkShipName: string | undefined;
-          for (const ship of logic.board1.ships) {
-            if (logic.board1.isShipSunk(ship)) {
+          // for (const ship of logic.board1.ships) {
+          //   if (logic.board1.isShipSunk(ship)) {
+          for (const ship of myBoard.ships) {
+            if (myBoard.isShipSunk(ship)) {
               for (let i = 0; i < ship.size; i++) {
                 const sc = ship.horizontal ? ship.x + i : ship.x;
                 const sr = ship.horizontal ? ship.y : ship.y + i;
@@ -813,7 +844,8 @@ function BattleshipPage() {
             }
           }
 
-          const eliminated = logic.board1.allShipsSunk();
+          // const eliminated = logic.board1.allShipsSunk();
+          const eliminated = myBoard.allShipsSunk();
 
           mgr.send({
             type: "attack_result_4p",
