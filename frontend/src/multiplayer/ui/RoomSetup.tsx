@@ -44,7 +44,11 @@ export default function BaseRoomSetup({
                         ←
                     </button>
                     <div>
-                        <h2 className="text-2xl font-extrabold text-white">{config.gameKey} Room</h2>
+                        <h2 className="text-2xl font-extrabold text-white">{
+                          config.gameKey.split(' ')
+                          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                          .join(' ')} Room
+                        </h2>
                         <div className="flex items-center gap-2 mt-1 text-xs font-semibold">
                             <span
                                 className={`px-2 py-0.5 rounded-full ${isConnected ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"}`}

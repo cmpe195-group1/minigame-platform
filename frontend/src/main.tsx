@@ -2,8 +2,6 @@
 import SudokuPage from "@/pages/SudokuPage";
 import ArcheryPage from "@/pages/ArcheryPage";
 import BattleshipPage from "@/pages/BattleshipPage";
-import ChessGameWrapper from "./games/chess/ChessGameWrapper";
-import KnockoutGameWrapper from "./games/knockout/KnockoutGameWrapper";
 import CheckersPage from "./pages/CheckersPage"
 import {StrictMode, useEffect} from "react"
 import {createRoot} from "react-dom/client"
@@ -19,6 +17,7 @@ import {type AuthSnapshot, signOutUser, startAuthListener, useAuthSnapshot} from
 
 import ChessPage from "./pages/ChessPage";
 import CardGrid from "@/components/CardGrid.tsx";
+import KnockoutPage from "./pages/KnockoutPage";
 
 function RequireAuth({ auth }: { auth: AuthSnapshot }) {
   if (auth.initializing) {
@@ -57,7 +56,7 @@ export function App() {
               <Route path="/games/archery" element={<ArcheryPage />} />
               <Route path="/games/battleship" element={<BattleshipPage />} />
               <Route path="/games/chess" element={<ChessPage />} />
-              <Route path="/games/knockout" element={<KnockoutGameWrapper />} />
+              <Route path="/games/knockout" element={<KnockoutPage />} />
               <Route path="/games/checkers" element={<CheckersPage />} />
               <Route path="/games/trivia" element={<Trivia/>} />
               <Route path="/games/anagrams" element={<Anagrams />} />

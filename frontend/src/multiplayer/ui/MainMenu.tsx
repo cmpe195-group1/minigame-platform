@@ -9,18 +9,6 @@ function isLocalhost(): boolean {
   return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
 
-/*
-Default constructor
-<MainMenu name="game name" 
-            onSelectLocal={function (): void {
-                throw new Error("Function not implemented.");
-            } } 
-            
-            onSelectRoom={function (): void {
-                throw new Error("Function not implemented.");
-            } }/> } />
-*/
-
 export default function MainMenu({ name, onSelectLocal, onSelectRoom }: Props) {
   const local = isLocalhost();
 

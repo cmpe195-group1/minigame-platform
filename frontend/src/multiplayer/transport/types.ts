@@ -11,66 +11,17 @@ export interface BaseRoomParticipant {
   clientId: string;
 }
 
-export interface BaseRoomState<TGameState, TParticipant = BaseRoomParticipant> {
+export interface BaseRoomState<
+  TGameState,
+  TParticipant extends BaseRoomParticipant = BaseRoomParticipant
+> {
   roomCode: string;
   hostClientId: string;
   maxPlayers: number;
   participants: TParticipant[];
   status: "waiting" | "playing" | "finished";
-  transport: "websocket";
-  gameState: TGameState | null
-  roomState: TGameState | null
+  gameState: TGameState | null;
 }
-
-/* Room particpant specific to a game
-Checkers
-
-export interface RoomParticipant {
-  playerId: number;
-  name: string;
-  clientId: string;
-  pieceColor: Player;
-}
-
-export interface RoomParticipant {
-  playerId: number;
-  name: string;
-  color: string;
-  colorName: string;
-  clientId: string;
-}
-*/
-
-/*
-checkers
-export interface RoomState {
-  roomCode: string;
-  hostClientId: string;
-  maxPlayers: number;
-  transport: "websocket";
-  participants: RoomParticipant[];
-  status: "waiting" | "playing" | "finished";
-  gameState: CheckersState | null;
-  winner: Player | null;
-  moveCount: number;
-}
-
-export interface RoomState {
-  roomCode: string;
-  hostClientId: string;
-  maxPlayers: number;
-  participants: RoomParticipant[];
-  status: RoomStatus;
-  transport: RoomTransport;
-  board: Board | null;
-  players: Player[];
-  currentPlayerIndex: number;
-  phase: GamePhase;
-  winner: Player | null;
-  lastMoveCorrect: boolean | null;
-  moveCount: number;
-}
-*/
 
 export type RoomTransport = "broadcast" | "websocket";
 
