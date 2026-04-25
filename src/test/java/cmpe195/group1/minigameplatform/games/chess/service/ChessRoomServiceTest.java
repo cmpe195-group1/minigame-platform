@@ -15,6 +15,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -78,6 +79,25 @@ class ChessRoomServiceTest {
 
         assertThat(room.getParticipants()).singleElement().extracting(cmpe195.group1.minigameplatform.games.chess.model.RoomParticipant::getName)
             .isEqualTo("Host Player");
+    }
+
+    @Test
+    void createRoom_retriesOnCodeCollisionAndFallsBackWhenResolvedNameIsBlank() throws Exception {
+        setRandom(sequenceRandom(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1));
+        registerRoomUnderCode(new RoomState(), "AAAAAA");
+
+        CreateRoomRequest payload = new CreateRoomRequest() {
+            @Override
+            public String resolvePlayerName() {
+                return "   ";
+            }
+        };
+
+        RoomState room = service.createRoom("host-client", payload);
+
+        assertThat(room.getRoomCode()).isEqualTo("AAAAAB");
+        assertThat(room.getParticipants()).singleElement().extracting(cmpe195.group1.minigameplatform.games.chess.model.RoomParticipant::getName)
+            .isEqualTo("Player 1");
     }
 
     @Test
@@ -392,6 +412,23 @@ class ChessRoomServiceTest {
             board.get(0).set(i, new ChessPiece("pawn", "black", false));
         }
         return board;
+    }
+
+    private Random sequenceRandom(int... values) {
+        return new Random() {
+            private int index;
+
+            @Override
+            public int nextInt(int bound) {
+                return values[index++];
+            }
+        };
+    }
+
+    private void setRandom(Random random) throws Exception {
+        Field randomField = ChessRoomService.class.getDeclaredField("random");
+        randomField.setAccessible(true);
+        randomField.set(service, random);
     }
 
     @SuppressWarnings("unchecked")

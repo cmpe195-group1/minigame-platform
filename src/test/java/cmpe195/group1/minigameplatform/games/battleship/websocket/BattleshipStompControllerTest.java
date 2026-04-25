@@ -8,6 +8,7 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +48,16 @@ class BattleshipStompControllerTest {
         controller.handleMessage(Map.of("type", "   ", "clientToken", "client-1"), headers("session-1"));
 
         verifyNoInteractions(roomService, messagingTemplate);
+    }
+
+    @Test
+    void handleMessage_ignoresBlankClientTokenForCreateAndJoin() {
+        controller.handleMessage(Map.of("type", "create_room", "clientToken", "   "), headers("session-1"));
+        controller.handleMessage(Map.of("type", "join", "clientToken", "   "), headers("session-2"));
+
+        verifyNoInteractions(roomService, messagingTemplate);
+        assertThat(sessionRegistry.getClientToken("session-1")).isNull();
+        assertThat(sessionRegistry.getClientToken("session-2")).isNull();
     }
 
     @Test
@@ -133,6 +144,10 @@ class BattleshipStompControllerTest {
         sessionRegistry.setRoomCode("session-2", "ROOM2");
         controller.onDisconnect(disconnectEvent("session-2"));
 
+        sessionRegistry.bindClient("session-3", null);
+        sessionRegistry.setRoomCode("session-3", "ROOM3");
+        controller.onDisconnect(disconnectEvent("session-3"));
+
         verifyNoInteractions(roomService, messagingTemplate);
     }
 
@@ -145,6 +160,16 @@ class BattleshipStompControllerTest {
         controller.onDisconnect(disconnectEvent("session-3"));
 
         verify(roomService).disconnect("client-3", "ROOM3");
+        verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    void sendDispatch_ignoresErrorWhenFallbackClientIsMissing() throws Exception {
+        Method sendDispatch = BattleshipStompController.class.getDeclaredMethod("sendDispatch", String.class, BattleshipRoomService.Dispatch.class);
+        sendDispatch.setAccessible(true);
+
+        sendDispatch.invoke(controller, null, BattleshipRoomService.Dispatch.error("boom"));
+
         verifyNoInteractions(messagingTemplate);
     }
 

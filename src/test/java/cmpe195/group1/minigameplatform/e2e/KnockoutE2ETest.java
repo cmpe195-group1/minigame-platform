@@ -12,12 +12,13 @@ class KnockoutE2ETest extends FrontendTest {
         useDesktopViewport(page);
         openGameFromHome(page, "knockout");
 
-        assertThat(page.url().toLowerCase()).contains("/games/knockout");
+        page.locator("[data-testid='game-main-menu-local-button']").click();
+        page.locator("[data-testid='local-setup-start']").click();
         page.locator("[data-testid='knockout-page']").waitFor();
         page.waitForFunction("""
                 () => document.querySelector('[data-testid="knockout-phaser-root"] canvas') !== null
                 """);
-        assertThat(page.locator("[data-testid='knockout-page'] h1").innerText()).contains("Knockout");
+        assertThat(page.url().toLowerCase()).contains("/games/knockout");
     }
 }
 

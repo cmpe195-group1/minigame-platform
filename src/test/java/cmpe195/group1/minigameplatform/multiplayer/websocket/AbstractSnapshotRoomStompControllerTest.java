@@ -156,6 +156,15 @@ class AbstractSnapshotRoomStompControllerTest {
     }
 
     @Test
+    void handleLeaveRoom_requiresNonNullClientTokenForKnownSession() {
+        sessionRegistry.bindClient("session-3", null);
+
+        controller.leave(new RoomScopedPayload.RoomCodeRequest(), headers("session-3"));
+
+        verifyNoInteractions(roomService, messagingTemplate);
+    }
+
+    @Test
     void rememberAndClearRoomCode_ignoreNullSessionIds() {
         controller.remember(null, "ROOM1");
         controller.clear(null);

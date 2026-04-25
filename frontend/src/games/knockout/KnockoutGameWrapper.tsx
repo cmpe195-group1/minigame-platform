@@ -134,7 +134,7 @@ export default function KnockoutGameWrapper({
   }, [shotReplay]);
 
   return (
-    <div className="w-full max-w-[800px]">
+    <div className="w-full max-w-[800px]" data-testid="knockout-page">
       <div ref={rootRef} data-testid="knockout-phaser-root" />
     </div>
   );

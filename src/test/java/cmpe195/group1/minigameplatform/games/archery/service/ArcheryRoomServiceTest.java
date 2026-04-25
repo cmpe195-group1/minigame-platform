@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.Map;
+import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,6 +49,16 @@ class ArcheryRoomServiceTest {
         assertThat(service.getRoom(null)).isNull();
         assertThat(service.roomCodeOf(nullPayloadRoom)).isEqualTo(nullPayloadRoom.getId());
         assertThat(service.roomCodeOf(null)).isNull();
+    }
+
+    @Test
+    void createRoom_retriesOnRoomCodeCollision() throws Exception {
+        setRandom(sequenceRandom(0, 0, 0, 0, 0, 0, 0, 0, 0, 1));
+        registerRoomUnderCode(new ArcheryRoomState(), "AAAAA");
+
+        ArcheryRoomState room = service.createRoom("host-client", new CreateRoomRequest());
+
+        assertThat(room.getId()).isEqualTo("AAAAB");
     }
 
     @Test
@@ -318,6 +329,21 @@ class ArcheryRoomServiceTest {
         assertThat(service.getRoom(soloRoom.getId())).isNull();
     }
 
+    @Test
+    void disconnect_waitingRoomDoesNotFinishGameWhenPlayersRemain() {
+        CreateRoomRequest request = new CreateRoomRequest();
+        request.setMaxPlayers(3);
+        ArcheryRoomState room = service.createRoom("host-client", request);
+        service.joinRoom("guest-client", joinRequest(room.getId(), "Guest"));
+        service.joinRoom("guest-2", joinRequest(room.getId(), "Guest Two"));
+
+        ArcheryRoomState updated = service.disconnect("guest-client", room.getId());
+
+        assertThat(updated).isSameAs(room);
+        assertThat(updated.getState()).isEqualTo("waiting");
+        assertThat(updated.getPlayers()).hasSize(2);
+    }
+
     private ArcheryRoomState startedRoom() {
         ArcheryRoomState room = service.createRoom("host-client", new CreateRoomRequest());
         service.joinRoom("guest-client", joinRequest(room.getId(), "Guest"));
@@ -350,6 +376,23 @@ class ArcheryRoomServiceTest {
         payload.setImpactX(impactX);
         payload.setImpactY(impactY);
         return payload;
+    }
+
+    private Random sequenceRandom(int... values) {
+        return new Random() {
+            private int index;
+
+            @Override
+            public int nextInt(int bound) {
+                return values[index++];
+            }
+        };
+    }
+
+    private void setRandom(Random random) throws Exception {
+        Field randomField = ArcheryRoomService.class.getDeclaredField("random");
+        randomField.setAccessible(true);
+        randomField.set(service, random);
     }
 
     @SuppressWarnings("unchecked")

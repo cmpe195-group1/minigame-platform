@@ -15,6 +15,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -70,6 +71,25 @@ class CheckersRoomServiceTest {
 
         assertThat(room.getParticipants()).singleElement().extracting(cmpe195.group1.minigameplatform.games.checkers.model.RoomParticipant::getName)
             .isEqualTo("Host Player");
+    }
+
+    @Test
+    void createRoom_retriesOnCodeCollisionAndFallsBackWhenResolvedNameIsBlank() throws Exception {
+        setRandom(sequenceRandom(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1));
+        registerRoomUnderCode(new RoomState(), "AAAAAA");
+
+        CreateRoomRequest payload = new CreateRoomRequest() {
+            @Override
+            public String resolvePlayerName() {
+                return "   ";
+            }
+        };
+
+        RoomState room = service.createRoom("host-client", payload);
+
+        assertThat(room.getRoomCode()).isEqualTo("AAAAAB");
+        assertThat(room.getParticipants()).singleElement().extracting(cmpe195.group1.minigameplatform.games.checkers.model.RoomParticipant::getName)
+            .isEqualTo("Player 1");
     }
 
     @Test
@@ -176,6 +196,14 @@ class CheckersRoomServiceTest {
         assertThat(service.makeMove("host-client", move(room.getRoomCode(), null))).isNull();
         assertThat(service.makeMove("host-client", move(room.getRoomCode(), new CheckersGameState()))).isNull();
         assertThat(service.makeMove("host-client", move(room.getRoomCode(), nextState("white", null, boardWithPieces(1, 1))))).isNull();
+
+        CheckersGameState missingBoard = new CheckersGameState();
+        missingBoard.setTurn("black");
+        assertThat(service.makeMove("host-client", move(room.getRoomCode(), missingBoard))).isNull();
+
+        CheckersGameState missingTurn = new CheckersGameState();
+        missingTurn.setBoard(boardWithPieces(1, 1));
+        assertThat(service.makeMove("host-client", move(room.getRoomCode(), missingTurn))).isNull();
     }
 
     @Test
@@ -198,6 +226,43 @@ class CheckersRoomServiceTest {
         assertThat(updated.getWinner()).isNull();
         assertThat(updated.getGameState().getTurn()).isEqualTo("white");
         assertThat(updated.getGameState().getSelected()).isNotNull();
+    }
+
+    @Test
+    void makeMove_handlesNonMultiJumpFallbackBranchesAndUnknownPieceColors() {
+        RoomState room = startedRoom();
+        room.setGameState(nextState("white", null, boardWithPieces(1, 1)));
+
+        MovePayload xMismatch = move(room.getRoomCode(), nextState("black", new CheckersPosition(3, 4), boardWithPieces(1, 1)));
+        xMismatch.setTo(new CheckersPosition(4, 4));
+
+        RoomState xMismatchUpdated = service.makeMove("host-client", xMismatch);
+
+        assertThat(xMismatchUpdated).isSameAs(room);
+        assertThat(xMismatchUpdated.getGameState().getTurn()).isEqualTo("black");
+
+        room.setGameState(nextState("white", null, boardWithPieces(1, 1)));
+        MovePayload yMismatch = move(room.getRoomCode(), nextState("black", new CheckersPosition(4, 3), boardWithPieces(1, 1)));
+        yMismatch.setTo(new CheckersPosition(4, 4));
+
+        RoomState yMismatchUpdated = service.makeMove("host-client", yMismatch);
+
+        assertThat(yMismatchUpdated).isSameAs(room);
+        assertThat(yMismatchUpdated.getGameState().getSelected().getY()).isEqualTo(3);
+
+        room.setGameState(nextState("white", null, boardWithPieces(1, 1)));
+        List<List<CheckersPiece>> boardWithUnknownColor = boardWithPieces(1, 1);
+        boardWithUnknownColor.get(3).set(3, new CheckersPiece("green", false));
+        MovePayload turnMismatch = move(room.getRoomCode(), nextState("black", new CheckersPosition(1, 4), boardWithUnknownColor));
+        turnMismatch.setTo(new CheckersPosition(1, 4));
+
+        RoomState turnMismatchUpdated = service.makeMove("host-client", turnMismatch);
+
+        assertThat(turnMismatchUpdated).isSameAs(room);
+        assertThat(turnMismatchUpdated.getStatus()).isEqualTo("playing");
+        assertThat(turnMismatchUpdated.getWinner()).isNull();
+        assertThat(turnMismatchUpdated.getGameState().getBoard().get(3).get(3)).isNotNull();
+        assertThat(turnMismatchUpdated.getGameState().getBoard().get(3).get(3).getColor()).isEqualTo("green");
     }
 
     @Test
@@ -273,9 +338,13 @@ class CheckersRoomServiceTest {
         assertThat(service.disconnect("ghost", "missing")).isNull();
 
         RoomState room = waitingRoom();
+        RoomState startedRoom = startedRoom();
 
         assertThat(service.disconnect("stranger", room.getRoomCode())).isSameAs(room);
         assertThat(room.getParticipants()).hasSize(2);
+        assertThat(service.disconnect("stranger", startedRoom.getRoomCode())).isSameAs(startedRoom);
+        assertThat(startedRoom.getParticipants()).hasSize(2);
+        assertThat(startedRoom.getStatus()).isEqualTo("playing");
 
         assertThat(service.disconnect("guest-client", room.getRoomCode())).isSameAs(room);
         assertThat(room.getParticipants()).singleElement().extracting(cmpe195.group1.minigameplatform.games.checkers.model.RoomParticipant::getClientId)
@@ -368,6 +437,23 @@ class CheckersRoomServiceTest {
             board.get(0).set(i, new CheckersPiece("black", false));
         }
         return board;
+    }
+
+    private Random sequenceRandom(int... values) {
+        return new Random() {
+            private int index;
+
+            @Override
+            public int nextInt(int bound) {
+                return values[index++];
+            }
+        };
+    }
+
+    private void setRandom(Random random) throws Exception {
+        Field randomField = CheckersRoomService.class.getDeclaredField("random");
+        randomField.setAccessible(true);
+        randomField.set(service, random);
     }
 
     @SuppressWarnings("unchecked")

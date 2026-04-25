@@ -24,7 +24,7 @@ export default function KnockoutLocalGameView({
         <h1 className="text-3xl font-extrabold text-white tracking-tight drop-shadow">
           🥌 Knockout Local Match
         </h1>
-        <p className="text-blue-300 text-sm mt-1">{statusLabel}</p>
+        <p className="text-blue-300 text-sm mt-1" data-testid="current-player-label">{statusLabel}</p>
       </header>
 
       <main className="flex-1 flex flex-col xl:flex-row items-center xl:items-start justify-center gap-6 px-4 pb-8">
