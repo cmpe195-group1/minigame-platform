@@ -1,0 +1,125 @@
+{
+    "root_group": {
+        "checks": {
+            "ws upgrade status is 101": {
+                "path": "::ws upgrade status is 101",
+                "id": "0cfe6115f84a55568afe69c6dcb08fcf",
+                "passes": 32,
+                "fails": 0,
+                "name": "ws upgrade status is 101"
+            }
+        },
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {}
+    },
+    "metrics": {
+        "data_sent": {
+            "rate": 6174.991329035425,
+            "count": 1204965
+        },
+        "ws_sessions": {
+            "count": 32,
+            "rate": 0.1639879353583993
+        },
+        "vus": {
+            "min": 32,
+            "max": 32,
+            "value": 32
+        },
+        "sudoku_app_error_rate": {
+            "passes": 0,
+            "fails": 32,
+            "value": 0
+        },
+        "vus_max": {
+            "value": 32,
+            "min": 32,
+            "max": 32
+        },
+        "iteration_duration": {
+            "avg": 195123.943465625,
+            "min": 195106.7753,
+            "med": 195124.5836,
+            "max": 195132.9242,
+            "p(90)": 195126.9061,
+            "p(95)": 195129.26979999998
+        },
+        "checks": {
+            "passes": 32,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.95": false
+            },
+            "value": 1
+        },
+        "iterations": {
+            "count": 32,
+            "rate": 0.1639879353583993
+        },
+        "ws_connecting": {
+            "min": 60.0219,
+            "med": 94.02775,
+            "max": 126.9879,
+            "p(90)": 96.2893,
+            "p(95)": 97.05988500000001,
+            "avg": 88.54668749999999
+        },
+        "sudoku_room_create_count": {
+            "rate": 0.04099698383959983,
+            "count": 8
+        },
+        "sudoku_room_join_count": {
+            "count": 24,
+            "rate": 0.12299095151879948
+        },
+        "sudoku_moves_sent": {
+            "count": 9230,
+            "rate": 47.3002701049383
+        },
+        "ws_msgs_received": {
+            "rate": 194.06434762772574,
+            "count": 37869
+        },
+        "sudoku_new_puzzle_requests": {
+            "count": 203,
+            "rate": 1.0402984649298457
+        },
+        "ws_msgs_sent": {
+            "count": 9569,
+            "rate": 49.03751729514134
+        },
+        "ws_session_duration": {
+            "avg": 195123.30459375004,
+            "min": 195105.9343,
+            "med": 195124.305,
+            "max": 195130.865,
+            "p(90)": 195126.28214999998,
+            "p(95)": 195126.87365
+        },
+        "data_received": {
+            "count": 322545780,
+            "rate": 1652925.5162738902
+        },
+        "sudoku_update_latency": {
+            "p(95)": 363,
+            "avg": 175.06464909426185,
+            "min": 5,
+            "med": 150,
+            "max": 1382,
+            "p(90)": 239
+        },
+        "sudoku_stomp_connected": {
+            "count": 32,
+            "rate": 0.1639879353583993
+        },
+        "sudoku_games_started": {
+            "count": 8,
+            "rate": 0.04099698383959983
+        }
+    },
+    "setup_data": {
+        "runId": "MO6HV0D2"
+    }
+}

@@ -1,0 +1,117 @@
+{
+    "metrics": {
+        "battleship_app_error_rate": {
+            "passes": 0,
+            "fails": 80,
+            "value": 0
+        },
+        "ws_connecting": {
+            "avg": 44.12423750000001,
+            "min": 16.059,
+            "med": 45.3697,
+            "max": 70.8351,
+            "p(90)": 62.93679000000001,
+            "p(95)": 65.877315
+        },
+        "ws_session_duration": {
+            "p(90)": 124111.95332,
+            "p(95)": 124115.8965,
+            "avg": 124085.46517125,
+            "min": 124026.5933,
+            "med": 124094.39240000001,
+            "max": 124123.0331
+        },
+        "data_received": {
+            "rate": 310005.8903528345,
+            "count": 38479584
+        },
+        "battleship_actions_sent": {
+            "count": 38304,
+            "rate": 308.59132011601196
+        },
+        "iteration_duration": {
+            "p(90)": 124112.52347999999,
+            "p(95)": 124116.504235,
+            "avg": 124086.58578874997,
+            "min": 124026.5933,
+            "med": 124094.9258,
+            "max": 124123.0331
+        },
+        "checks": {
+            "passes": 80,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.95": false
+            },
+            "value": 1
+        },
+        "ws_msgs_sent": {
+            "count": 38544,
+            "rate": 310.5248496906737
+        },
+        "vus": {
+            "value": 80,
+            "min": 80,
+            "max": 80
+        },
+        "battleship_stomp_connected": {
+            "rate": 0.6445098582205764,
+            "count": 80
+        },
+        "battleship_room_create_count": {
+            "count": 20,
+            "rate": 0.1611274645551441
+        },
+        "ws_sessions": {
+            "count": 80,
+            "rate": 0.6445098582205764
+        },
+        "iterations": {
+            "count": 80,
+            "rate": 0.6445098582205764
+        },
+        "data_sent": {
+            "count": 7434525,
+            "rate": 59895.30817109163
+        },
+        "vus_max": {
+            "value": 80,
+            "min": 80,
+            "max": 80
+        },
+        "battleship_relay_latency": {
+            "max": 373,
+            "p(90)": 20,
+            "p(95)": 30,
+            "avg": 9.174100807118664,
+            "min": 0,
+            "med": 5
+        },
+        "ws_msgs_received": {
+            "count": 115133,
+            "rate": 927.5544188313703
+        },
+        "battleship_room_join_count": {
+            "rate": 0.4833823936654323,
+            "count": 60
+        }
+    },
+    "setup_data": {
+        "runId": "MO6HRPKQ"
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "ws upgrade status is 101": {
+                    "path": "::ws upgrade status is 101",
+                    "id": "0cfe6115f84a55568afe69c6dcb08fcf",
+                    "passes": 80,
+                    "fails": 0,
+                    "name": "ws upgrade status is 101"
+                }
+            }
+    }
+}

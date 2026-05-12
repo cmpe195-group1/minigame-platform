@@ -1,0 +1,97 @@
+{
+    "metrics": {
+        "checks": {
+            "passes": 200,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "data_sent": {
+            "count": 67984,
+            "rate": 1127.4994034663425
+        },
+        "stomp_connect_success_rate": {
+            "passes": 200,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "ws_sessions": {
+            "count": 200,
+            "rate": 3.3169551761189178
+        },
+        "ws_connecting": {
+            "avg": 74.82499400000005,
+            "min": 2.9846,
+            "med": 60.891400000000004,
+            "max": 266.3595,
+            "p(90)": 191.18616,
+            "p(95)": 205.60757999999998
+        },
+        "ws_session_duration": {
+            "max": 60286.5889,
+            "p(90)": 60267.21225,
+            "p(95)": 60274.004775,
+            "avg": 60166.67010499997,
+            "min": 60014.708,
+            "med": 60181.88395
+        },
+        "ws_msgs_sent": {
+            "count": 400,
+            "rate": 6.6339103522378355
+        },
+        "ws_msgs_received": {
+            "count": 200,
+            "rate": 3.3169551761189178
+        },
+        "iteration_duration": {
+            "avg": 60170.1378195,
+            "min": 60031.5696,
+            "med": 60182.90195,
+            "max": 60287.6376,
+            "p(90)": 60267.27381,
+            "p(95)": 60275.67516
+        },
+        "iterations": {
+            "count": 200,
+            "rate": 3.3169551761189178
+        },
+        "stomp_connected": {
+            "count": 200,
+            "rate": 3.3169551761189178
+        },
+        "vus": {
+            "value": 200,
+            "min": 200,
+            "max": 200
+        },
+        "vus_max": {
+            "value": 200,
+            "min": 200,
+            "max": 200
+        },
+        "data_received": {
+            "count": 89468,
+            "rate": 1483.8067284850367
+        }
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "ws upgrade status is 101": {
+                    "name": "ws upgrade status is 101",
+                    "path": "::ws upgrade status is 101",
+                    "id": "0cfe6115f84a55568afe69c6dcb08fcf",
+                    "passes": 200,
+                    "fails": 0
+                }
+            }
+    }
+}
